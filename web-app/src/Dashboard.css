@@ -1,0 +1,241 @@
+/* ================================================================
+   Dashboard.css  —  SpectraAuth Analytics Dashboard
+   ================================================================ */
+
+.dashboard {
+  min-height: 100vh;
+  background: #060a0f;
+  color: #cde8f5;
+  font-family: "Lato", sans-serif;
+  position: relative;
+}
+
+.dash-scanlines {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px);
+}
+
+/* ── Header ────────────────────────────────────────────────────── */
+.dash-hdr {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px;
+  background: rgba(6,10,15,0.95);
+  border-bottom: 1px solid rgba(0,200,255,0.12);
+  backdrop-filter: blur(12px);
+  gap: 16px; flex-wrap: wrap;
+}
+.dash-hdr-left { display: flex; align-items: center; gap: 20px; }
+.dash-hdr-right { display: flex; align-items: center; gap: 14px; }
+
+.back-btn {
+  background: rgba(0,200,255,0.08); border: 1px solid rgba(0,200,255,0.2);
+  color: #00c8ff; border-radius: 7px; padding: 7px 14px;
+  cursor: pointer; font-size: 13px; font-family: "Source Code Pro", monospace;
+  transition: all .2s;
+}
+.back-btn:hover { background: rgba(0,200,255,0.15); box-shadow: 0 0 14px rgba(0,200,255,0.2); }
+
+.dash-title {
+  font-family: "Oxanium", sans-serif; font-size: 17px; font-weight: 800;
+  color: #e8f4ff; letter-spacing: 0.05em;
+  display: flex; align-items: center; gap: 10px;
+}
+.dash-title-icon { font-size: 18px; }
+
+.refresh-btn {
+  background: rgba(0,200,255,0.06); border: 1px solid rgba(0,200,255,0.15);
+  color: #00c8ff; border-radius: 7px; padding: 7px 14px;
+  cursor: pointer; font-size: 13px; font-family: "Source Code Pro", monospace;
+  transition: all .2s;
+}
+.refresh-btn:hover { border-color: rgba(0,200,255,0.4); }
+.refresh-btn.spinning { animation: spinFull 1s linear infinite; }
+@keyframes spinFull { to { transform: rotate(360deg); } }
+
+.dash-online { display: flex; align-items: center; gap: 7px; font-size: 12px; color: rgba(205,232,245,0.4); font-family: "Source Code Pro", monospace; }
+.online-dot { width: 7px; height: 7px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 6px #00ff88; animation: blink2 2s ease-in-out infinite; }
+@keyframes blink2 { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+/* ── Main ──────────────────────────────────────────────────────── */
+.dash-main {
+  position: relative; z-index: 1;
+  max-width: 1160px; margin: 0 auto;
+  padding: 28px 24px 60px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+
+/* ── Loading / empty ───────────────────────────────────────────── */
+.dash-loading, .dash-empty {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 16px; text-align: center;
+  min-height: 300px;
+}
+.dash-spin {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 3px solid rgba(0,200,255,0.2); border-top-color: #00c8ff;
+  animation: spinFull .9s linear infinite;
+}
+.dash-empty h3 { font-family: "Oxanium", sans-serif; font-size: 22px; }
+.dash-empty p { color: rgba(205,232,245,0.45); }
+
+/* ── Cards ─────────────────────────────────────────────────────── */
+.dash-card {
+  background: rgba(11,17,24,0.85); border: 1px solid rgba(0,200,255,0.1);
+  border-radius: 14px; padding: 22px;
+}
+
+/* ── KPIs ──────────────────────────────────────────────────────── */
+.kpi-row {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 14px;
+}
+.kpi-card {
+  background: rgba(11,17,24,0.85); border: 1px solid rgba(0,200,255,0.1);
+  border-radius: 12px; padding: 18px 20px; text-align: center;
+  transition: border-color .2s, transform .2s;
+}
+.kpi-card:hover { border-color: rgba(0,200,255,0.3); transform: translateY(-2px); }
+.kpi-icon { font-size: 20px; margin-bottom: 6px; }
+.kpi-val {
+  font-family: "Oxanium", sans-serif; font-size: 30px; font-weight: 900;
+  color: #e8f4ff; line-height: 1;
+}
+.kpi-label { font-family: "Source Code Pro", monospace; font-size: 10px; color: rgba(205,232,245,0.35); margin-top: 6px; letter-spacing: 0.05em; }
+
+/* ── Charts row ────────────────────────────────────────────────── */
+.charts-row {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap: 14px;
+}
+.chart-card {
+  background: rgba(11,17,24,0.85); border: 1px solid rgba(0,200,255,0.1);
+  border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 14px;
+}
+.chart-title {
+  font-family: "Oxanium", sans-serif; font-size: 12px; font-weight: 700;
+  color: #00c8ff; letter-spacing: 1px; margin-bottom: 4px;
+}
+.no-data { font-size: 12px; color: rgba(205,232,245,0.3); font-style: italic; text-align: center; }
+.no-data.center { padding: 20px; }
+
+/* Donut */
+.donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.donut-legend { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.dl-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(205,232,245,0.6); }
+.dl-item b { color: #e8f4ff; }
+.dl-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* Sparkline */
+.sparkline { width: 100%; height: 50px; display: block; }
+.spark-labels { display: flex; justify-content: space-between; font-size: 10px; color: rgba(205,232,245,0.3); font-family: "Source Code Pro", monospace; }
+
+/* Auth rate vertical bar */
+.auth-rate-wrap { display: flex; gap: 16px; align-items: center; }
+.auth-rate-bar { width: 28px; height: 100px; border-radius: 6px; background: rgba(255,255,255,0.05); display: flex; flex-direction: column; overflow: hidden; }
+.arb-fill { width: 100%; transition: height 1s ease; }
+.arb-fill.ok-fill  { background: linear-gradient(to bottom, #00ff88, #00c8ff); order: 2; }
+.arb-fill.bad-fill { background: linear-gradient(to bottom, #ff2d55, #ff6b35); order: 1; }
+.auth-rate-labels { display: flex; flex-direction: column; gap: 8px; font-size: 11px; font-family: "Source Code Pro", monospace; }
+
+/* ── Feature bars ──────────────────────────────────────────────── */
+.feat-bars { display: flex; flex-direction: column; gap: 7px; }
+.fbar-row { display: flex; align-items: center; gap: 10px; }
+.fbar-name { font-family: "Source Code Pro", monospace; font-size: 10px; color: rgba(205,232,245,0.45); width: 130px; flex-shrink: 0; text-align: right; }
+.fbar-track { flex: 1; height: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+.fbar-fill { height: 100%; border-radius: 3px; transition: width 1.2s ease; }
+.fbar-val { font-family: "Source Code Pro", monospace; font-size: 10px; color: rgba(205,232,245,0.5); width: 60px; text-align: right; }
+
+/* ── Alert ─────────────────────────────────────────────────────── */
+.dash-alert {
+  background: rgba(255,45,85,0.08); border: 1px solid rgba(255,45,85,0.3);
+  border-radius: 10px; padding: 14px 18px; color: #ff2d55; font-size: 13px;
+  animation: alertGl 2s ease-in-out infinite;
+}
+@keyframes alertGl { 0%,100% { box-shadow:none; } 50% { box-shadow:0 0 18px rgba(255,45,85,0.15); } }
+
+/* ── Table ─────────────────────────────────────────────────────── */
+.table-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.table-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.search-inp {
+  background: rgba(15,25,35,0.9); border: 1px solid rgba(0,200,255,0.15);
+  border-radius: 7px; padding: 7px 12px; color: #cde8f5;
+  font-family: "Source Code Pro", monospace; font-size: 12px;
+  outline: none; width: 220px; transition: border-color .2s;
+}
+.search-inp::placeholder { color: rgba(205,232,245,0.3); }
+.search-inp:focus { border-color: rgba(0,200,255,0.4); }
+.sort-sel {
+  background: rgba(15,25,35,0.9); border: 1px solid rgba(0,200,255,0.15);
+  border-radius: 7px; padding: 7px 10px; color: #cde8f5;
+  font-family: "Source Code Pro", monospace; font-size: 12px;
+  outline: none; cursor: pointer; transition: border-color .2s;
+}
+.sort-sel:focus { border-color: rgba(0,200,255,0.4); }
+
+.table-cols-hdr {
+  display: grid; grid-template-columns: 36px 110px 1fr 90px 60px 80px 140px 28px;
+  gap: 8px; padding: 7px 12px;
+  font-family: "Source Code Pro", monospace; font-size: 10px;
+  color: rgba(205,232,245,0.3); letter-spacing: 0.06em;
+  border-bottom: 1px solid rgba(0,200,255,0.07); margin-bottom: 6px;
+}
+
+.dash-scan-row {
+  border-left: 3px solid transparent; border-radius: 7px; margin-bottom: 4px;
+  transition: background .15s;
+}
+.dsr-ok  { border-left-color: #00ff88; }
+.dsr-bad { border-left-color: #ff2d55; }
+.dsr-main {
+  display: grid; grid-template-columns: 36px 110px 1fr 90px 60px 80px 140px 28px;
+  gap: 8px; align-items: center; padding: 9px 12px;
+  cursor: pointer; border-radius: 6px; transition: background .15s;
+}
+.dsr-main:hover { background: rgba(0,200,255,0.05); }
+.dsr-idx   { font-family: "Source Code Pro", monospace; font-size: 11px; color: rgba(205,232,245,0.3); }
+.dsr-badge { font-family: "Oxanium", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }
+.db-ok  { color: #00ff88; }
+.db-bad { color: #ff2d55; }
+.dsr-med   { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsr-batch { font-family: "Source Code Pro", monospace; font-size: 10px; color: rgba(205,232,245,0.4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsr-conf  { font-family: "Source Code Pro", monospace; font-size: 12px; color: #a78bfa; text-align: right; }
+.dsr-score { font-family: "Source Code Pro", monospace; font-size: 11px; color: rgba(205,232,245,0.45); text-align: right; }
+.dsr-time  { font-family: "Source Code Pro", monospace; font-size: 10px; color: rgba(205,232,245,0.3); }
+.dsr-expand { font-size: 10px; color: rgba(205,232,245,0.3); text-align: center; }
+
+.dsr-features { padding: 10px 12px 12px; }
+.dsr-feat-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 6px;
+}
+.dsr-feat-chip {
+  background: rgba(0,200,255,0.04); border: 1px solid rgba(0,200,255,0.1);
+  border-radius: 6px; padding: 5px 9px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.dfc-key { font-family: "Source Code Pro", monospace; font-size: 10px; color: rgba(205,232,245,0.4); }
+.dfc-val { font-family: "Source Code Pro", monospace; font-size: 11px; color: #00c8ff; font-weight: 600; }
+
+.table-footer { font-family: "Source Code Pro", monospace; font-size: 11px; color: rgba(205,232,245,0.3); text-align: right; margin-top: 10px; }
+
+/* ── Export ────────────────────────────────────────────────────── */
+.export-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.export-btn {
+  background: linear-gradient(135deg, rgba(0,200,255,0.12), rgba(0,255,136,0.08));
+  border: 1px solid rgba(0,200,255,0.3); color: #00c8ff;
+  border-radius: 8px; padding: 10px 20px; cursor: pointer;
+  font-family: "Oxanium", sans-serif; font-size: 13px; font-weight: 700;
+  letter-spacing: 0.06em; transition: all .2s;
+}
+.export-btn:hover { box-shadow: 0 0 20px rgba(0,200,255,0.25); transform: translateY(-1px); }
+.export-note { font-size: 12px; color: rgba(205,232,245,0.3); font-family: "Source Code Pro", monospace; }
+
+/* ── Utility ───────────────────────────────────────────────────── */
+.mono { font-family: "Source Code Pro", monospace !important; }
+
+/* ── Responsive ────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .table-cols-hdr,
+  .dsr-main { grid-template-columns: 30px 90px 1fr 50px 28px; }
+  .dsr-batch, .dsr-score, .dsr-time { display: none; }
+  .kpi-row { grid-template-columns: repeat(3,1fr); }
+  .charts-row { grid-template-columns: 1fr; }
+}

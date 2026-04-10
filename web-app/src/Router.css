@@ -1,0 +1,77 @@
+/* Router.css  — shared nav bar that appears on scanner & dashboard */
+
+.router-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Router nav bar ─────────────────────────────────────────────── */
+.router-nav {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 28px;
+  background: rgba(6,10,15,0.96);
+  border-bottom: 1px solid rgba(0,200,255,0.18);
+  backdrop-filter: blur(14px);
+  gap: 20px;
+}
+
+.rn-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Oxanium", "Source Code Pro", monospace;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  background: linear-gradient(90deg, #00ff88, #00c8ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  cursor: pointer;
+  user-select: none;
+}
+.rn-hex {
+  font-size: 18px;
+  -webkit-text-fill-color: #00c8ff;
+  filter: drop-shadow(0 0 6px #00c8ff80);
+}
+
+.rn-links {
+  display: flex;
+  gap: 8px;
+}
+
+.rn-btn {
+  background: rgba(0,200,255,0.05);
+  border: 1px solid rgba(0,200,255,0.12);
+  color: rgba(205,232,245,0.55);
+  border-radius: 7px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-family: "Lato", sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.rn-btn:hover {
+  border-color: rgba(0,200,255,0.35);
+  color: #00c8ff;
+  background: rgba(0,200,255,0.1);
+}
+.rn-btn.rn-active {
+  border-color: rgba(0,200,255,0.5);
+  color: #00c8ff;
+  background: rgba(0,200,255,0.12);
+  box-shadow: 0 0 12px rgba(0,200,255,0.15);
+}
+
+@media (max-width: 500px) {
+  .router-nav { padding: 10px 16px; }
+  .rn-logo    { font-size: 13px; }
+  .rn-btn     { padding: 6px 10px; font-size: 12px; }
+}
