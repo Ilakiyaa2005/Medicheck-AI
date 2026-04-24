@@ -336,7 +336,8 @@ export default function App() {
   const onDrop = (e) => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); };
 
   const analyze = async () => {
-    if (!file) { setError("Upload or capture a tablet image first."); return; }
+  if (!medicine.trim()) { setError("Please enter the medicine name before analysing."); return; }
+  if (!file) { setError("Upload or capture a tablet image first."); return; }
     setLoading(true); setError(null); setResult(null);
     const form = new FormData();
     form.append("image", file);
@@ -403,7 +404,9 @@ export default function App() {
 
           {/* Medicine / batch inputs */}
           <div className="fields">
-            <label className="lbl">Medicine Name
+              <label className="lbl">
+  Medicine Name<span className="star">*</span>
+
               <input className="inp" placeholder="e.g. Paracetamol 500mg" value={medicine} onChange={e => setMedicine(e.target.value)} />
             </label>
             <label className="lbl">Batch ID (optional)
@@ -461,8 +464,8 @@ export default function App() {
           {/* Buttons — only show in upload mode (camera has its own CTA) */}
           {inputMode === "upload" && (
             <div className="btn-row">
-              <button className="btn-primary" onClick={analyze} disabled={loading || !file}>
-                {loading
+                 <button className="btn-primary" onClick={analyze} disabled={loading || !file || !medicine.trim()}>
+                 {loading
                   ? <><span className="spin-sm" />Analysing…</>
                   : <><Icon name="scan" size={16} />Run Spectral Analysis</>}
               </button>
@@ -500,10 +503,10 @@ export default function App() {
               <h3>Ready to Authenticate</h3>
               <p>Upload or capture a tablet image. The Isolation Forest model will compare its spectral signature against the genuine profile and flag anomalies.</p>
               <div className="method-chips">
-                <span className="chip">Isolation Forest</span>
-                <span className="chip">17 Spectral Features</span>
+                
+                
                 <span className="chip">Anomaly Detection</span>
-                <span className="chip">No Label Required</span>
+               
               </div>
             </div>
           )}

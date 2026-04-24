@@ -71,10 +71,10 @@ if not os.path.exists(CSV_PATH):
         "Specular_Ratio": np.random.normal(0.08, 0.02, n),
     }
     df = pd.DataFrame(data)
-    df = pd.read_excel(CSV_PATH)
+    df = pd.read_csv("pharma_dataset.csv", encoding='utf-8', engine='python', on_bad_lines='skip')
     print(f"  [OK] Loaded '{CSV_PATH}' — {len(df)} rows, {len(df.columns)} columns")
 else:
-    df = pd.read_excel(CSV_PATH)
+    df = pd.read_csv("pharma_dataset.csv", encoding='utf-8', engine='python', on_bad_lines='skip')
     print(f"  [OK] Loaded '{CSV_PATH}' — {len(df)} rows, {len(df.columns)} columns")
 
 # ── STEP 2 — PREPROCESS ───────────────────────────────────────────────────────
