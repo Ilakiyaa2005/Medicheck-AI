@@ -244,3 +244,92 @@
   .kpi-row { grid-template-columns: repeat(3,1fr); }
   .charts-row { grid-template-columns: 1fr; }
 }
+
+/* 🔥 GLOBAL FIX */
+* {
+  box-sizing: border-box;
+}
+
+/* 📱 MOBILE RESPONSIVE */
+@media (max-width: 720px) {
+
+  .dash-main {
+    padding: 16px 10px;
+  }
+
+  .dash-hdr {
+    padding: 10px;
+  }
+
+  .dash-title {
+    font-size: 14px;
+  }
+
+  /* KPI */
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Charts */
+  .charts-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* Donut resize */
+  .donut-wrap svg {
+    width: 100px;
+    height: 100px;
+  }
+
+  /* Search input fix */
+  .search-inp {
+    width: 100%;
+  }
+
+  /* Table scroll fix */
+  .dash-card {
+    overflow-x: auto;
+  }
+
+  /* Table grid simplify */
+  .table-cols-hdr,
+  .dsr-main {
+    grid-template-columns: 30px 1fr 60px;
+  }
+
+  /* Hide unwanted columns */
+  .dsr-batch,
+  .dsr-score,
+  .dsr-time,
+  .dsr-conf {
+    display: none;
+  }
+
+  /* Medicine text wrap */
+  .dsr-med {
+    white-space: normal;
+  }
+
+  /* Feature bars */
+  .fbar-name {
+    width: 80px;
+    font-size: 9px;
+  }
+
+  .fbar-val {
+    width: 40px;
+  }
+
+  /* Header wrap */
+  .dash-hdr-left,
+  .dash-hdr-right {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Export button */
+  .export-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

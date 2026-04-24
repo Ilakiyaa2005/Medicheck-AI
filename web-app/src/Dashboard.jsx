@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import "./Dashboard.css";
 
-const API = "http://localhost:5000";
+const API="https://medicheck-ai-njtm.onrender.com";
+//const API = import.meta.env.VITE_API_URL;
 
 /* ── Mini donut chart ────────────────────────────────────────────────────── */
 function Donut({ genuine, fake }) {
