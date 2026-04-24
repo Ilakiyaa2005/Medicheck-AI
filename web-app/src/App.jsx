@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import "./App.css";
 
-const API = "http://10.11.5.235:5000";
+const API = "https://medicheck-ai-njtm.onrender.com";
 
 /* ─── tiny icon set ──────────────────────────────────────────────────────── */
 const Ic = ({ d, size = 18, stroke = 2 }) => (
