@@ -24,7 +24,6 @@ const ICONS = {
   flip:     <><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></>,
   capture:  <><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></>,
   retake:   <><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>,
-  wifi:     <><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>,
 };
 const Icon = ({ name, size, stroke }) => <Ic d={ICONS[name]} size={size} stroke={stroke} />;
 
@@ -153,8 +152,7 @@ const CameraModule = ({ onCapture, loading }) => {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
-    setCamReady(false);
-    setCamError(null);
+    setCamReady(false); setCamError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -163,44 +161,33 @@ const CameraModule = ({ onCapture, loading }) => {
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current.play();
-          setCamReady(true);
-        };
+        videoRef.current.onloadedmetadata = () => { videoRef.current.play(); setCamReady(true); };
       }
     } catch (err) {
       setCamError(
-        err.name === "NotAllowedError"
-          ? "Camera permission denied. Please allow camera access in your browser."
-          : err.name === "NotFoundError"
-          ? "No camera device found on this device."
-          : `Camera error: ${err.message}`
+        err.name === "NotAllowedError" ? "Camera permission denied. Please allow camera access in your browser."
+        : err.name === "NotFoundError" ? "No camera device found on this device."
+        : `Camera error: ${err.message}`
       );
     }
   }, []);
 
   useEffect(() => {
     startCamera(facingMode);
-    return () => {
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-    };
+    return () => { if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop()); };
   }, [facingMode, startCamera]);
 
-  const flipCamera  = () => { setCaptured(null); setFacingMode(f => f === "environment" ? "user" : "environment"); };
-
+  const flipCamera   = () => { setCaptured(null); setFacingMode(f => f === "environment" ? "user" : "environment"); };
   const capturePhoto = () => {
     const video = videoRef.current, canvas = canvasRef.current;
     if (!video || !canvas) return;
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     if (facingMode === "user") { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     setCaptured(canvas.toDataURL("image/jpeg", 0.92));
   };
-
-  const retake = () => setCaptured(null);
-
+  const retake   = () => setCaptured(null);
   const usePhoto = () => {
     if (!captured) return;
     const byteString = atob(captured.split(",")[1]);
@@ -213,15 +200,12 @@ const CameraModule = ({ onCapture, loading }) => {
     onCapture(file, captured);
   };
 
-  if (camError) {
-    return (
-      <div className="cam-error">
-        <Icon name="warn" size={28} />
-        <p>{camError}</p>
-        <button className="btn-ghost" onClick={() => startCamera(facingMode)}>Retry</button>
-      </div>
-    );
-  }
+  if (camError) return (
+    <div className="cam-error">
+      <Icon name="warn" size={28} /><p>{camError}</p>
+      <button className="btn-ghost" onClick={() => startCamera(facingMode)}>Retry</button>
+    </div>
+  );
 
   return (
     <div className="cam-wrap">
@@ -272,6 +256,109 @@ const CameraModule = ({ onCapture, loading }) => {
   );
 };
 
+/* ─── Medicine image validator ───────────────────────────────────────────────
+   Pure browser-side pixel analysis — no API key, no cost, instant.
+
+   Checks:
+   1. Medicine name keyword guard  (rejects "food", "chicken", "cat" etc.)
+   2. Pixel colour distribution:
+      • Too much green  → plant / vegetable / nature
+      • Too much sky-blue → outdoor scene
+      • Too much skin tone → selfie / person
+      • Too dark overall  → not a tablet on a plain background
+      • Too low uniformity → busy complex scene, not a tablet close-up
+────────────────────────────────────────────────────────────────────────────── */
+async function validateMedicineImage(file, medicineName) {
+  return new Promise((resolve) => {
+
+    // ── 1. Medicine name keyword guard ───────────────────────────────────────
+    const BAD_KEYWORDS = [
+      "food","fruit","vegetable","animal","cat","dog","bird","flower",
+      "tree","car","phone","laptop","person","face","selfie","nature",
+      "sky","beach","mountain","river","sea","chicken","rice","curry",
+      "coffee","tea","juice","cake","pizza","burger","fish","egg",
+      "plant","grass","leaf","water","drink","snack","biscuit","bread",
+    ];
+    const nameLower = medicineName.toLowerCase();
+    for (const kw of BAD_KEYWORDS) {
+      if (nameLower.includes(kw)) {
+        resolve({
+          valid: false,
+          reason: `❌ "${medicineName}" doesn't look like a medicine name. Please enter the correct tablet or capsule name.`,
+        });
+        return;
+      }
+    }
+
+    // ── 2. Pixel-level analysis ──────────────────────────────────────────────
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      // Sample at 100×100 for speed
+      const canvas = document.createElement("canvas");
+      canvas.width = 100; canvas.height = 100;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, 100, 100);
+      URL.revokeObjectURL(url);
+
+      const { data } = ctx.getImageData(0, 0, 100, 100);
+      const total = 10000; // 100×100
+
+      let green = 0, sky = 0, skin = 0, dark = 0;
+      let sumR = 0, sumG = 0, sumB = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        sumR += r; sumG += g; sumB += b;
+        if (g > r + 40 && g > b + 40 && g > 80)              green++;  // vivid green
+        if (b > r + 30 && b > g + 10 && b > 100)             sky++;    // sky blue
+        if (r > 150 && g > 80 && g < 170 && b < 140 && r > g && g > b) skin++; // skin
+        if (r < 30  && g < 30  && b < 30)                    dark++;   // near-black
+      }
+
+      const avgR = sumR / total, avgG = sumG / total, avgB = sumB / total;
+
+      // Count pixels within ±40 of the average colour (uniform tablet surface)
+      let uniform = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (
+          Math.abs(data[i]   - avgR) < 40 &&
+          Math.abs(data[i+1] - avgG) < 40 &&
+          Math.abs(data[i+2] - avgB) < 40
+        ) uniform++;
+      }
+
+      const gPct = green   / total;
+      const sPct = sky     / total;
+      const kPct = skin    / total;
+      const dPct = dark    / total;
+      const uPct = uniform / total;
+
+      if (gPct > 0.35) {
+        resolve({ valid: false, reason: "❌ This looks like a plant, food, or nature photo. Please upload a close-up image of a tablet or capsule only." });
+      } else if (sPct > 0.30) {
+        resolve({ valid: false, reason: "❌ This looks like an outdoor or sky photo. Please upload a close-up image of a tablet or capsule only." });
+      } else if (kPct > 0.25) {
+        resolve({ valid: false, reason: "❌ This looks like a photo of a person. Please upload a close-up image of a tablet or capsule only." });
+      } else if (dPct > 0.60) {
+        resolve({ valid: false, reason: "❌ Image is too dark. Please take a photo of the tablet in good lighting on a plain white or light background." });
+      } else if (uPct < 0.15) {
+        resolve({ valid: false, reason: "❌ Image appears to be a complex scene. Please upload a close-up photo of the tablet or capsule only." });
+      } else {
+        resolve({ valid: true });
+      }
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ valid: false, reason: "❌ Could not read the image file. Please try a different image." });
+    };
+
+    img.src = url;
+  });
+}
+
 /* ─── Main App ───────────────────────────────────────────────────────────── */
 export default function App() {
   const [file,         setFile]         = useState(null);
@@ -279,49 +366,32 @@ export default function App() {
   const [medicine,     setMedicine]     = useState("");
   const [batchId,      setBatchId]      = useState("");
   const [loading,      setLoading]      = useState(false);
+  const [validating,   setValidating]   = useState(false);
   const [result,       setResult]       = useState(null);
   const [error,        setError]        = useState(null);
   const [history,      setHistory]      = useState([]);
   const [histOpen,     setHistOpen]     = useState(false);
   const [featOpen,     setFeatOpen]     = useState(false);
-  const [inputMode,    setInputMode]    = useState("upload"); // "upload" | "camera"
-  const [serverStatus, setServerStatus] = useState("unknown"); // "unknown" | "waking" | "online" | "offline"
+  const [inputMode,    setInputMode]    = useState("upload");
+  const [serverStatus, setServerStatus] = useState("unknown");
   const fileRef = useRef();
 
-  // ── On mount: wake server + load history ──────────────────────────────────
   useEffect(() => {
-    // 1. Show "waking" banner immediately so user isn't confused by slow load
     setServerStatus("waking");
-
-    // 2. Ping server to wake it up (fire and forget)
     warmupServer().then(() => setServerStatus("online")).catch(() => setServerStatus("offline"));
-
-    // 3. Load history (best-effort, no crash if server is asleep)
     fetchWithTimeout(`${API}/history`, {}, 15000, 1)
       .then(r => r.json())
-      .then(d => {
-        setHistory(d.scans || []);
-        setServerStatus("online");
-      })
-      .catch(() => {
-        // History load failed — server may be sleeping, that's OK
-        setServerStatus("waking");
-      });
+      .then(d => { setHistory(d.scans || []); setServerStatus("online"); })
+      .catch(() => setServerStatus("waking"));
   }, []);
 
   const handleFile = useCallback((f) => {
     if (!f || !f.type.startsWith("image/")) return;
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
-    setResult(null);
-    setError(null);
+    setFile(f); setPreview(URL.createObjectURL(f)); setResult(null); setError(null);
   }, []);
 
   const handleCameraCapture = useCallback((file, dataUrl) => {
-    setFile(file);
-    setPreview(dataUrl);
-    setResult(null);
-    setError(null);
+    setFile(file); setPreview(dataUrl); setResult(null); setError(null);
     setInputMode("upload");
   }, []);
 
@@ -332,65 +402,61 @@ export default function App() {
     if (!medicine.trim()) { setError("Please enter the medicine name before analysing."); return; }
     if (!file)            { setError("Upload or capture a tablet image first."); return; }
 
-    setLoading(true);
-    setError(null);
-    setResult(null);
+    // Step 1 — Validate image
+    setValidating(true); setError(null); setResult(null);
+    const validation = await validateMedicineImage(file, medicine);
+    setValidating(false);
 
+    if (!validation.valid) {
+      setError(validation.reason);
+      return;
+    }
+
+    // Step 2 — Send to backend
+    setLoading(true); setError(null);
     const form = new FormData();
     form.append("image", file);
     form.append("medicine_name", medicine || "Unknown");
     form.append("batch_id", batchId || "");
 
     try {
-      // 30 s timeout, 2 retries — handles Render cold-start gracefully
       const res  = await fetchWithTimeout(`${API}/predict`, { method: "POST", body: form }, 30000, 2);
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Server error");
-
-      setResult(data);
-      setServerStatus("online");
+      setResult(data); setServerStatus("online");
       setHistory(p => [data, ...p].slice(0, 100));
     } catch (e) {
-      // Friendly message for cold-start / network failures
-      const msg = e.message.includes("unreachable")
+      setError(e.message.includes("unreachable")
         ? "⏳ Server is waking up (free tier). Please wait ~30 seconds and try again."
-        : e.message;
-      setError(msg);
+        : e.message);
       setServerStatus("waking");
     } finally {
       setLoading(false);
     }
   };
 
-  const clear = () => {
-    setFile(null); setPreview(null); setResult(null); setError(null);
-  };
+  const clear = () => { setFile(null); setPreview(null); setResult(null); setError(null); };
 
   const delScan = async (id) => {
-    try {
-      await fetchWithTimeout(`${API}/history/${id}`, { method: "DELETE" }, 10000, 1);
-    } catch (_) { /* best-effort */ }
+    try { await fetchWithTimeout(`${API}/history/${id}`, { method: "DELETE" }, 10000, 1); } catch (_) {}
     setHistory(p => p.filter(s => s.scan_id !== id));
   };
 
   const isGenuine    = result?.result === "Genuine";
   const verdictColor = result ? (isGenuine ? "var(--ok)" : "var(--bad)") : "transparent";
+  const isBusy       = loading || validating;
 
   return (
     <div className="app">
       <div className="scanlines" aria-hidden="true" />
       <div className="ambient a1" /><div className="ambient a2" /><div className="ambient a3" />
 
-      {/* ── Server status banner (shown until server is confirmed online) ── */}
       <ServerBanner status={serverStatus} />
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
       <header className="hdr">
         <div className="hdr-left">
-          <div className="logo-mark">
-            <div className="logo-hex"><Icon name="pill" size={20} /></div>
-          </div>
+          <div className="logo-mark"><div className="logo-hex"><Icon name="pill" size={20} /></div></div>
           <div>
             <div className="logo-title">SPECTRAAUTH</div>
             <div className="logo-sub">Computational Spectral Authentication · Anomaly Detection</div>
@@ -399,9 +465,7 @@ export default function App() {
         <div className="hdr-right">
           <div className={`status-dot ${serverStatus === "online" ? "" : "status-dot-warn"}`} />
           <span className="status-txt">
-            {serverStatus === "online"  ? "API Online"  :
-             serverStatus === "waking"  ? "Waking up…"  :
-             serverStatus === "offline" ? "Offline"      : "Connecting…"}
+            {serverStatus === "online" ? "API Online" : serverStatus === "waking" ? "Waking up…" : serverStatus === "offline" ? "Offline" : "Connecting…"}
           </span>
           <button className="hist-btn" onClick={() => setHistOpen(v => !v)}>
             <Icon name="clock" size={16} /> History
@@ -412,8 +476,6 @@ export default function App() {
 
       {/* ── Main grid ────────────────────────────────────────────────────── */}
       <main className="grid">
-
-        {/* LEFT — Upload & controls */}
         <section className="card upload-card">
           <div className="card-title"><Icon name="scan" /> Spectral Scan</div>
 
@@ -429,19 +491,15 @@ export default function App() {
             </label>
           </div>
 
-          {/* ── Input mode tabs ──────────────────────────────────────────── */}
           <div className="input-tabs">
-            <button className={`input-tab ${inputMode === "upload" ? "input-tab-active" : ""}`}
-              onClick={() => setInputMode("upload")}>
+            <button className={`input-tab ${inputMode === "upload" ? "input-tab-active" : ""}`} onClick={() => setInputMode("upload")}>
               <Icon name="upload" size={14} /> Upload
             </button>
-            <button className={`input-tab ${inputMode === "camera" ? "input-tab-active" : ""}`}
-              onClick={() => setInputMode("camera")}>
+            <button className={`input-tab ${inputMode === "camera" ? "input-tab-active" : ""}`} onClick={() => setInputMode("camera")}>
               <Icon name="camera" size={14} /> Camera
             </button>
           </div>
 
-          {/* ── Upload mode ──────────────────────────────────────────────── */}
           {inputMode === "upload" && (
             <>
               <div className={`drop ${preview ? "drop-filled" : ""}`}
@@ -450,11 +508,9 @@ export default function App() {
                 {preview ? (
                   <>
                     <img src={preview} alt="tablet" className="drop-img" />
-                    {loading && <ScanLine />}
+                    {isBusy && <ScanLine />}
                     <div className="drop-overlay">
-                      <button className="chg-btn" onClick={e => { e.stopPropagation(); fileRef.current.click(); }}>
-                        Change Image
-                      </button>
+                      <button className="chg-btn" onClick={e => { e.stopPropagation(); fileRef.current.click(); }}>Change Image</button>
                     </div>
                   </>
                 ) : (
@@ -462,33 +518,31 @@ export default function App() {
                     <div className="drop-icon-wrap"><Icon name="upload" size={30} /></div>
                     <p className="drop-title">Drop tablet image here</p>
                     <p className="drop-hint">JPG · PNG · WEBP · click to browse</p>
+                    <p className="drop-hint" style={{ marginTop: 6, color: "rgba(255,255,255,0.3)", fontSize: 11 }}>
+                      ⚠️ Only tablet / capsule / medicine strip images accepted
+                    </p>
                   </div>
                 )}
               </div>
-              <input ref={fileRef} type="file" accept="image/*" hidden
-                onChange={e => handleFile(e.target.files[0])} />
+              <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => handleFile(e.target.files[0])} />
             </>
           )}
 
-          {/* ── Camera mode ──────────────────────────────────────────────── */}
           {inputMode === "camera" && (
-            <CameraModule onCapture={handleCameraCapture} loading={loading} />
+            <CameraModule onCapture={handleCameraCapture} loading={isBusy} />
           )}
 
-          {/* ── Analyse button (upload mode only) ───────────────────────── */}
           {inputMode === "upload" && (
             <div className="btn-row">
-              <button className="btn-primary"
-                onClick={analyze}
-                disabled={loading || !file || !medicine.trim()}>
-                {loading
+              <button className="btn-primary" onClick={analyze} disabled={isBusy || !file || !medicine.trim()}>
+                {validating
+                  ? <><span className="spin-sm" />Validating image…</>
+                  : loading
                   ? <><span className="spin-sm" />Analysing…</>
                   : <><Icon name="scan" size={16} />Run Spectral Analysis</>}
               </button>
               {(file || result) && (
-                <button className="btn-ghost" onClick={clear} title="Clear">
-                  <Icon name="x" size={18} />
-                </button>
+                <button className="btn-ghost" onClick={clear} title="Clear"><Icon name="x" size={18} /></button>
               )}
             </div>
           )}
@@ -510,7 +564,7 @@ export default function App() {
         <section className="card result-card">
           <div className="card-title"><Icon name="eye" /> Analysis Result</div>
 
-          {!loading && !result && (
+          {!isBusy && !result && (
             <div className="idle">
               <div className="idle-rings">
                 <div className="idle-ring r1" /><div className="idle-ring r2" /><div className="idle-ring r3" />
@@ -520,11 +574,23 @@ export default function App() {
               <p>Upload or capture a tablet image. The Isolation Forest model will compare its spectral signature against the genuine profile and flag anomalies.</p>
               <div className="method-chips">
                 <span className="chip">Anomaly Detection</span>
+                <span className="chip">Medicine Only</span>
               </div>
             </div>
           )}
 
-          {loading && (
+          {validating && (
+            <div className="loading-state">
+              <div className="loading-rings">
+                <div className="l-ring l1" /><div className="l-ring l2" /><div className="l-ring l3" />
+                <Icon name="eye" size={24} />
+              </div>
+              <p className="loading-txt">Validating image…</p>
+              <p className="loading-sub">Checking this is a medicine / tablet image</p>
+            </div>
+          )}
+
+          {loading && !validating && (
             <div className="loading-state">
               <div className="loading-rings">
                 <div className="l-ring l1" /><div className="l-ring l2" /><div className="l-ring l3" />
@@ -538,7 +604,7 @@ export default function App() {
             </div>
           )}
 
-          {!loading && result && (
+          {!isBusy && result && (
             <div className="res-body">
               <div className="verdict-banner" style={{ "--vc": verdictColor }}>
                 <PulseRing color={verdictColor} />
@@ -555,8 +621,7 @@ export default function App() {
 
               {!isGenuine && (
                 <div className="alert-banner">
-                  <Icon name="warn" size={18} />
-                  <span>{result.alert}</span>
+                  <Icon name="warn" size={18} /><span>{result.alert}</span>
                 </div>
               )}
 
@@ -564,14 +629,8 @@ export default function App() {
                 <Gauge value={result.confidence} color={verdictColor}
                   label={isGenuine ? "Genuine Match" : "Anomaly Detected"} />
                 <div className="score-details">
-                  <div className="score-item">
-                    <span className="si-label">Anomaly Score</span>
-                    <span className="si-val mono">{result.anomaly_score}</span>
-                  </div>
-                  <div className="score-item">
-                    <span className="si-label">Decision Score</span>
-                    <span className="si-val mono">{result.decision_score}</span>
-                  </div>
+                  <div className="score-item"><span className="si-label">Anomaly Score</span><span className="si-val mono">{result.anomaly_score}</span></div>
+                  <div className="score-item"><span className="si-label">Decision Score</span><span className="si-val mono">{result.decision_score}</span></div>
                   <div className="score-item">
                     <span className="si-label">Label Code</span>
                     <span className="si-val mono" style={{ color: verdictColor }}>
@@ -580,9 +639,7 @@ export default function App() {
                   </div>
                   <div className="score-item">
                     <span className="si-label">Timestamp</span>
-                    <span className="si-val mono" style={{ fontSize: 11 }}>
-                      {new Date(result.timestamp).toLocaleString()}
-                    </span>
+                    <span className="si-val mono" style={{ fontSize: 11 }}>{new Date(result.timestamp).toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -593,7 +650,7 @@ export default function App() {
                   <span style={{ color: "var(--bad)" }}>Counterfeit</span>
                 </div>
                 <div className="scale-track">
-                  <div className="scale-fill ok-fill"  style={{ width: "50%" }} />
+                  <div className="scale-fill ok-fill" style={{ width: "50%" }} />
                   <div className="scale-fill bad-fill" style={{ width: "50%" }} />
                   <div className="scale-pointer" style={{
                     left: isGenuine
