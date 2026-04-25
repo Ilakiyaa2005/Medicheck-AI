@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import "./App.css";
-
-const API = "https://medicheck-ai-njtm.onrender.com";
+import { API, fetchWithTimeout, warmupServer } from "./api";
 
 /* ─── tiny icon set ──────────────────────────────────────────────────────── */
 const Ic = ({ d, size = 18, stroke = 2 }) => (
@@ -25,6 +24,7 @@ const ICONS = {
   flip:     <><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></>,
   capture:  <><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></>,
   retake:   <><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>,
+  wifi:     <><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>,
 };
 const Icon = ({ name, size, stroke }) => <Ic d={ICONS[name]} size={size} stroke={stroke} />;
 
@@ -38,6 +38,20 @@ const PulseRing = ({ color }) => (
     <div className="pulse-ring r2" style={{ "--pc": color }} />
   </div>
 );
+
+/* ─── Server status banner ───────────────────────────────────────────────── */
+const ServerBanner = ({ status }) => {
+  if (status === "online") return null;
+  const isWaking = status === "waking";
+  return (
+    <div className={`server-banner ${isWaking ? "sb-waking" : "sb-offline"}`}>
+      <span className={`sb-dot ${isWaking ? "sb-dot-waking" : "sb-dot-offline"}`} />
+      {isWaking
+        ? "⏳ Server is waking up (free tier). This takes ~30 seconds on first load…"
+        : "⚠️ Server offline or unreachable. Check your connection."}
+    </div>
+  );
+};
 
 /* ─── Confidence gauge ───────────────────────────────────────────────────── */
 const Gauge = ({ value, color, label }) => {
@@ -67,12 +81,12 @@ const Gauge = ({ value, color, label }) => {
 /* ─── Feature table ──────────────────────────────────────────────────────── */
 const FeatureTable = ({ features }) => {
   const groups = [
-    { title: "RGB", keys: ["Mean_R", "Mean_G", "Mean_B"] },
-    { title: "Ratios", keys: ["R_G_Ratio", "G_B_Ratio", "R_B_Ratio"] },
-    { title: "HSV", keys: ["Mean_H", "Mean_S", "Mean_V"] },
-    { title: "Intensity", keys: ["Mean_Intensity", "Max_Intensity", "Min_Intensity", "Std_Intensity"] },
-    { title: "Texture", keys: ["Contrast", "Homogeneity"] },
-    { title: "Optical", keys: ["Glossiness", "Specular_Ratio"] },
+    { title: "RGB",       keys: ["Mean_R","Mean_G","Mean_B"] },
+    { title: "Ratios",    keys: ["R_G_Ratio","G_B_Ratio","R_B_Ratio"] },
+    { title: "HSV",       keys: ["Mean_H","Mean_S","Mean_V"] },
+    { title: "Intensity", keys: ["Mean_Intensity","Max_Intensity","Min_Intensity","Std_Intensity"] },
+    { title: "Texture",   keys: ["Contrast","Homogeneity"] },
+    { title: "Optical",   keys: ["Glossiness","Specular_Ratio"] },
   ];
   const colorOf = (key) => {
     if (key.includes("_R") || key.startsWith("R_")) return "#ff6b6b";
@@ -126,16 +140,15 @@ const HistRow = ({ s, onDelete }) => {
 
 /* ─── Camera Module ──────────────────────────────────────────────────────── */
 const CameraModule = ({ onCapture, loading }) => {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
-  const [camReady, setCamReady] = useState(false);
-  const [camError, setCamError] = useState(null);
-  const [facingMode, setFacingMode] = useState("environment"); // "environment" = back cam
-  const [captured, setCaptured] = useState(null); // data URL of snapshot
+  const videoRef    = useRef(null);
+  const canvasRef   = useRef(null);
+  const streamRef   = useRef(null);
+  const [camReady,   setCamReady]   = useState(false);
+  const [camError,   setCamError]   = useState(null);
+  const [facingMode, setFacingMode] = useState("environment");
+  const [captured,   setCaptured]   = useState(null);
 
   const startCamera = useCallback(async (facing) => {
-    // Stop any existing stream first
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
@@ -169,39 +182,27 @@ const CameraModule = ({ onCapture, loading }) => {
   useEffect(() => {
     startCamera(facingMode);
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-      }
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
     };
   }, [facingMode, startCamera]);
 
-  const flipCamera = () => {
-    setCaptured(null);
-    setFacingMode(f => (f === "environment" ? "user" : "environment"));
-  };
+  const flipCamera  = () => { setCaptured(null); setFacingMode(f => f === "environment" ? "user" : "environment"); };
 
   const capturePhoto = () => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
+    const video = videoRef.current, canvas = canvasRef.current;
     if (!video || !canvas) return;
-    canvas.width = video.videoWidth;
+    canvas.width  = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
-    // Mirror horizontally if using front camera
-    if (facingMode === "user") {
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-    }
+    if (facingMode === "user") { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    setCaptured(dataUrl);
+    setCaptured(canvas.toDataURL("image/jpeg", 0.92));
   };
 
   const retake = () => setCaptured(null);
 
   const usePhoto = () => {
     if (!captured) return;
-    // Convert data URL to File object
     const byteString = atob(captured.split(",")[1]);
     const mimeString = captured.split(",")[0].split(":")[1].split(";")[0];
     const ab = new ArrayBuffer(byteString.length);
@@ -224,61 +225,36 @@ const CameraModule = ({ onCapture, loading }) => {
 
   return (
     <div className="cam-wrap">
-      {/* Live viewfinder or captured snapshot */}
       <div className="cam-viewport">
-        {/* Always render video so ref stays valid; hide when snapshot taken */}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="cam-video"
-          style={{
-            display: captured ? "none" : "block",
-            transform: facingMode === "user" ? "scaleX(-1)" : "none",
-          }}
-        />
-        {captured && (
-          <img src={captured} alt="Captured tablet" className="cam-snapshot" />
-        )}
+        <video ref={videoRef} autoPlay playsInline muted className="cam-video"
+          style={{ display: captured ? "none" : "block", transform: facingMode === "user" ? "scaleX(-1)" : "none" }} />
+        {captured && <img src={captured} alt="Captured tablet" className="cam-snapshot" />}
         {!camReady && !captured && (
           <div className="cam-loading">
             <span className="spin-sm" style={{ width: 24, height: 24, borderWidth: 3 }} />
             <span>Starting camera…</span>
           </div>
         )}
-        {/* Targeting overlay — only when live */}
         {camReady && !captured && (
           <div className="cam-overlay" aria-hidden="true">
-            <div className="cam-bracket tl" />
-            <div className="cam-bracket tr" />
-            <div className="cam-bracket bl" />
-            <div className="cam-bracket br" />
+            <div className="cam-bracket tl" /><div className="cam-bracket tr" />
+            <div className="cam-bracket bl" /><div className="cam-bracket br" />
             <div className="cam-guide">Position tablet in frame</div>
           </div>
         )}
         {loading && captured && <ScanLine />}
       </div>
-
-      {/* Hidden canvas for snapshot */}
       <canvas ref={canvasRef} style={{ display: "none" }} />
-
-      {/* Controls */}
       <div className="cam-controls">
         {!captured ? (
           <>
             <button className="cam-flip-btn" onClick={flipCamera} title="Flip camera" disabled={!camReady}>
               <Icon name="flip" size={18} />
             </button>
-            <button
-              className="cam-shutter"
-              onClick={capturePhoto}
-              disabled={!camReady}
-              title="Take photo"
-            >
+            <button className="cam-shutter" onClick={capturePhoto} disabled={!camReady} title="Take photo">
               <Icon name="capture" size={28} />
             </button>
-            <div style={{ width: 44 }} /> {/* spacer to center shutter */}
+            <div style={{ width: 44 }} />
           </>
         ) : (
           <>
@@ -298,21 +274,39 @@ const CameraModule = ({ onCapture, loading }) => {
 
 /* ─── Main App ───────────────────────────────────────────────────────────── */
 export default function App() {
-  const [file,       setFile]       = useState(null);
-  const [preview,    setPreview]    = useState(null);
-  const [medicine,   setMedicine]   = useState("");
-  const [batchId,    setBatchId]    = useState("");
-  const [loading,    setLoading]    = useState(false);
-  const [result,     setResult]     = useState(null);
-  const [error,      setError]      = useState(null);
-  const [history,    setHistory]    = useState([]);
-  const [histOpen,   setHistOpen]   = useState(false);
-  const [featOpen,   setFeatOpen]   = useState(false);
-  const [inputMode,  setInputMode]  = useState("upload"); // "upload" | "camera"
+  const [file,         setFile]         = useState(null);
+  const [preview,      setPreview]      = useState(null);
+  const [medicine,     setMedicine]     = useState("");
+  const [batchId,      setBatchId]      = useState("");
+  const [loading,      setLoading]      = useState(false);
+  const [result,       setResult]       = useState(null);
+  const [error,        setError]        = useState(null);
+  const [history,      setHistory]      = useState([]);
+  const [histOpen,     setHistOpen]     = useState(false);
+  const [featOpen,     setFeatOpen]     = useState(false);
+  const [inputMode,    setInputMode]    = useState("upload"); // "upload" | "camera"
+  const [serverStatus, setServerStatus] = useState("unknown"); // "unknown" | "waking" | "online" | "offline"
   const fileRef = useRef();
 
+  // ── On mount: wake server + load history ──────────────────────────────────
   useEffect(() => {
-    fetch(`${API}/history`).then(r => r.json()).then(d => setHistory(d.scans || [])).catch(() => {});
+    // 1. Show "waking" banner immediately so user isn't confused by slow load
+    setServerStatus("waking");
+
+    // 2. Ping server to wake it up (fire and forget)
+    warmupServer().then(() => setServerStatus("online")).catch(() => setServerStatus("offline"));
+
+    // 3. Load history (best-effort, no crash if server is asleep)
+    fetchWithTimeout(`${API}/history`, {}, 15000, 1)
+      .then(r => r.json())
+      .then(d => {
+        setHistory(d.scans || []);
+        setServerStatus("online");
+      })
+      .catch(() => {
+        // History load failed — server may be sleeping, that's OK
+        setServerStatus("waking");
+      });
   }, []);
 
   const handleFile = useCallback((f) => {
@@ -323,34 +317,47 @@ export default function App() {
     setError(null);
   }, []);
 
-  // Called by CameraModule when user taps "Use Photo"
   const handleCameraCapture = useCallback((file, dataUrl) => {
     setFile(file);
     setPreview(dataUrl);
     setResult(null);
     setError(null);
-    // Switch to upload view to show preview + run analysis
     setInputMode("upload");
   }, []);
 
   const onDrop = (e) => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); };
 
+  // ── Analyse ───────────────────────────────────────────────────────────────
   const analyze = async () => {
-  if (!medicine.trim()) { setError("Please enter the medicine name before analysing."); return; }
-  if (!file) { setError("Upload or capture a tablet image first."); return; }
-    setLoading(true); setError(null); setResult(null);
+    if (!medicine.trim()) { setError("Please enter the medicine name before analysing."); return; }
+    if (!file)            { setError("Upload or capture a tablet image first."); return; }
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
     const form = new FormData();
     form.append("image", file);
     form.append("medicine_name", medicine || "Unknown");
     form.append("batch_id", batchId || "");
+
     try {
-      const res  = await fetch(`${API}/predict`, { method: "POST", body: form });
+      // 30 s timeout, 2 retries — handles Render cold-start gracefully
+      const res  = await fetchWithTimeout(`${API}/predict`, { method: "POST", body: form }, 30000, 2);
       const data = await res.json();
+
       if (!res.ok) throw new Error(data.error || "Server error");
+
       setResult(data);
+      setServerStatus("online");
       setHistory(p => [data, ...p].slice(0, 100));
     } catch (e) {
-      setError(e.message);
+      // Friendly message for cold-start / network failures
+      const msg = e.message.includes("unreachable")
+        ? "⏳ Server is waking up (free tier). Please wait ~30 seconds and try again."
+        : e.message;
+      setError(msg);
+      setServerStatus("waking");
     } finally {
       setLoading(false);
     }
@@ -361,20 +368,24 @@ export default function App() {
   };
 
   const delScan = async (id) => {
-    await fetch(`${API}/history/${id}`, { method: "DELETE" }).catch(() => {});
+    try {
+      await fetchWithTimeout(`${API}/history/${id}`, { method: "DELETE" }, 10000, 1);
+    } catch (_) { /* best-effort */ }
     setHistory(p => p.filter(s => s.scan_id !== id));
   };
 
-  const isGenuine = result?.result === "Genuine";
+  const isGenuine    = result?.result === "Genuine";
   const verdictColor = result ? (isGenuine ? "var(--ok)" : "var(--bad)") : "transparent";
 
   return (
     <div className="app">
-      {/* scanline texture overlay */}
       <div className="scanlines" aria-hidden="true" />
       <div className="ambient a1" /><div className="ambient a2" /><div className="ambient a3" />
 
-      {/* ── Header ───────────────────────────────────────────────────── */}
+      {/* ── Server status banner (shown until server is confirmed online) ── */}
+      <ServerBanner status={serverStatus} />
+
+      {/* ── Header ───────────────────────────────────────────────────────── */}
       <header className="hdr">
         <div className="hdr-left">
           <div className="logo-mark">
@@ -386,8 +397,12 @@ export default function App() {
           </div>
         </div>
         <div className="hdr-right">
-          <div className="status-dot" />
-          <span className="status-txt">API Online</span>
+          <div className={`status-dot ${serverStatus === "online" ? "" : "status-dot-warn"}`} />
+          <span className="status-txt">
+            {serverStatus === "online"  ? "API Online"  :
+             serverStatus === "waking"  ? "Waking up…"  :
+             serverStatus === "offline" ? "Offline"      : "Connecting…"}
+          </span>
           <button className="hist-btn" onClick={() => setHistOpen(v => !v)}>
             <Icon name="clock" size={16} /> History
             {history.length > 0 && <span className="badge">{history.length}</span>}
@@ -395,42 +410,38 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── Main grid ────────────────────────────────────────────────── */}
+      {/* ── Main grid ────────────────────────────────────────────────────── */}
       <main className="grid">
 
         {/* LEFT — Upload & controls */}
         <section className="card upload-card">
           <div className="card-title"><Icon name="scan" /> Spectral Scan</div>
 
-          {/* Medicine / batch inputs */}
           <div className="fields">
-              <label className="lbl">
-  Medicine Name<span className="star">*</span>
-
-              <input className="inp" placeholder="e.g. Paracetamol 500mg" value={medicine} onChange={e => setMedicine(e.target.value)} />
+            <label className="lbl">
+              Medicine Name<span className="star">*</span>
+              <input className="inp" placeholder="e.g. Paracetamol 500mg"
+                value={medicine} onChange={e => setMedicine(e.target.value)} />
             </label>
             <label className="lbl">Batch ID (optional)
-              <input className="inp" placeholder="e.g. BT-2024-001" value={batchId} onChange={e => setBatchId(e.target.value)} />
+              <input className="inp" placeholder="e.g. BT-2024-001"
+                value={batchId} onChange={e => setBatchId(e.target.value)} />
             </label>
           </div>
 
-          {/* ── Input mode tabs ──────────────────────────────────────── */}
+          {/* ── Input mode tabs ──────────────────────────────────────────── */}
           <div className="input-tabs">
-            <button
-              className={`input-tab ${inputMode === "upload" ? "input-tab-active" : ""}`}
-              onClick={() => setInputMode("upload")}
-            >
+            <button className={`input-tab ${inputMode === "upload" ? "input-tab-active" : ""}`}
+              onClick={() => setInputMode("upload")}>
               <Icon name="upload" size={14} /> Upload
             </button>
-            <button
-              className={`input-tab ${inputMode === "camera" ? "input-tab-active" : ""}`}
-              onClick={() => setInputMode("camera")}
-            >
+            <button className={`input-tab ${inputMode === "camera" ? "input-tab-active" : ""}`}
+              onClick={() => setInputMode("camera")}>
               <Icon name="camera" size={14} /> Camera
             </button>
           </div>
 
-          {/* ── Upload mode ──────────────────────────────────────────── */}
+          {/* ── Upload mode ──────────────────────────────────────────────── */}
           {inputMode === "upload" && (
             <>
               <div className={`drop ${preview ? "drop-filled" : ""}`}
@@ -441,7 +452,9 @@ export default function App() {
                     <img src={preview} alt="tablet" className="drop-img" />
                     {loading && <ScanLine />}
                     <div className="drop-overlay">
-                      <button className="chg-btn" onClick={e => { e.stopPropagation(); fileRef.current.click(); }}>Change Image</button>
+                      <button className="chg-btn" onClick={e => { e.stopPropagation(); fileRef.current.click(); }}>
+                        Change Image
+                      </button>
                     </div>
                   </>
                 ) : (
@@ -452,35 +465,38 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => handleFile(e.target.files[0])} />
+              <input ref={fileRef} type="file" accept="image/*" hidden
+                onChange={e => handleFile(e.target.files[0])} />
             </>
           )}
 
-          {/* ── Camera mode ──────────────────────────────────────────── */}
+          {/* ── Camera mode ──────────────────────────────────────────────── */}
           {inputMode === "camera" && (
             <CameraModule onCapture={handleCameraCapture} loading={loading} />
           )}
 
-          {/* Buttons — only show in upload mode (camera has its own CTA) */}
+          {/* ── Analyse button (upload mode only) ───────────────────────── */}
           {inputMode === "upload" && (
             <div className="btn-row">
-                 <button className="btn-primary" onClick={analyze} disabled={loading || !file || !medicine.trim()}>
-                 {loading
+              <button className="btn-primary"
+                onClick={analyze}
+                disabled={loading || !file || !medicine.trim()}>
+                {loading
                   ? <><span className="spin-sm" />Analysing…</>
                   : <><Icon name="scan" size={16} />Run Spectral Analysis</>}
               </button>
               {(file || result) && (
-                <button className="btn-ghost" onClick={clear} title="Clear"><Icon name="x" size={18} /></button>
+                <button className="btn-ghost" onClick={clear} title="Clear">
+                  <Icon name="x" size={18} />
+                </button>
               )}
             </div>
           )}
 
-          {/* Analyze button also shown after camera capture lands back in upload mode */}
           {inputMode === "upload" && error && (
             <div className="err-box"><Icon name="warn" size={15} />{error}</div>
           )}
 
-          {/* Feature toggle button (post result) */}
           {result?.features && (
             <button className="feat-toggle" onClick={() => setFeatOpen(v => !v)}>
               <Icon name="chart" size={14} />
@@ -503,10 +519,7 @@ export default function App() {
               <h3>Ready to Authenticate</h3>
               <p>Upload or capture a tablet image. The Isolation Forest model will compare its spectral signature against the genuine profile and flag anomalies.</p>
               <div className="method-chips">
-                
-                
                 <span className="chip">Anomaly Detection</span>
-               
               </div>
             </div>
           )}
@@ -519,12 +532,14 @@ export default function App() {
               </div>
               <p className="loading-txt">Extracting spectral features…</p>
               <p className="loading-sub">Running Isolation Forest anomaly detection</p>
+              <p className="loading-sub" style={{ marginTop: 8, opacity: 0.5, fontSize: 11 }}>
+                First request may take ~30 s if server was sleeping
+              </p>
             </div>
           )}
 
           {!loading && result && (
             <div className="res-body">
-              {/* Verdict banner */}
               <div className="verdict-banner" style={{ "--vc": verdictColor }}>
                 <PulseRing color={verdictColor} />
                 <div className="verdict-center">
@@ -538,7 +553,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Alert */}
               {!isGenuine && (
                 <div className="alert-banner">
                   <Icon name="warn" size={18} />
@@ -546,7 +560,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* Gauge + scores */}
               <div className="scores-row">
                 <Gauge value={result.confidence} color={verdictColor}
                   label={isGenuine ? "Genuine Match" : "Anomaly Detected"} />
@@ -574,14 +587,13 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Anomaly scale bar */}
               <div className="scale-wrap">
                 <div className="scale-labels">
                   <span style={{ color: "var(--ok)" }}>Genuine</span>
                   <span style={{ color: "var(--bad)" }}>Counterfeit</span>
                 </div>
                 <div className="scale-track">
-                  <div className="scale-fill ok-fill" style={{ width: "50%" }} />
+                  <div className="scale-fill ok-fill"  style={{ width: "50%" }} />
                   <div className="scale-fill bad-fill" style={{ width: "50%" }} />
                   <div className="scale-pointer" style={{
                     left: isGenuine
@@ -597,7 +609,7 @@ export default function App() {
         </section>
       </main>
 
-      {/* ── History Drawer ───────────────────────────────────────────── */}
+      {/* ── History Drawer ───────────────────────────────────────────────── */}
       {histOpen && (
         <div className="drawer-bg" onClick={() => setHistOpen(false)}>
           <aside className="drawer" onClick={e => e.stopPropagation()}>

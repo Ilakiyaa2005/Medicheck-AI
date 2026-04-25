@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import "./Dashboard.css";
-
-const API="https://medicheck-ai-njtm.onrender.com";
-//const API = import.meta.env.VITE_API_URL;
+import { API, fetchWithTimeout, warmupServer } from "./api";
 
 /* ── Mini donut chart ────────────────────────────────────────────────────── */
 function Donut({ genuine, fake }) {
@@ -15,16 +13,13 @@ function Donut({ genuine, fake }) {
   return (
     <div className="donut-wrap">
       <svg width="130" height="130" viewBox="0 0 130 130">
-        {/* track */}
         <circle cx="65" cy="65" r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="14"/>
-        {/* genuine arc */}
         <circle cx="65" cy="65" r={r} fill="none" stroke="#00ff88" strokeWidth="14"
           strokeLinecap="butt"
           strokeDasharray={`${gDash} ${circ - gDash}`}
           transform="rotate(-90 65 65)"
           style={{ transition: "stroke-dasharray 1s ease" }}
         />
-        {/* fake arc */}
         <circle cx="65" cy="65" r={r} fill="none" stroke="#ff2d55" strokeWidth="14"
           strokeLinecap="butt"
           strokeDasharray={`${fDash} ${circ - fDash}`}
@@ -122,49 +117,57 @@ function ScanRow({ s, idx }) {
 
 /* ── MAIN DASHBOARD ──────────────────────────────────────────────────────── */
 export default function Dashboard({ onBack }) {
-  const [scans,    setScans]    = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [filter,   setFilter]   = useState("all"); // all | genuine | fake
-  const [search,   setSearch]   = useState("");
-  const [sortBy,   setSortBy]   = useState("time"); // time | conf | score
+  const [scans,      setScans]      = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [filter,     setFilter]     = useState("all");   // all | genuine | fake
+  const [search,     setSearch]     = useState("");
+  const [sortBy,     setSortBy]     = useState("time");  // time | conf | score
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState(null);    // ← new: surface load errors
 
   const load = async () => {
     setRefreshing(true);
+    setFetchError(null);
     try {
-      const r = await fetch(`${API}/history?limit=200`);
+      // 20 s timeout, 2 retries — handles Render cold-start
+      const r = await fetchWithTimeout(`${API}/history?limit=200`, {}, 20000, 2);
       const d = await r.json();
       setScans(d.scans || []);
-    } catch {}
+    } catch (err) {
+      setFetchError(
+        err.message.includes("unreachable")
+          ? "⏳ Server is waking up. Please wait ~30 seconds and click Refresh."
+          : `Failed to load: ${err.message}`
+      );
+    }
     setLoading(false);
     setRefreshing(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // Wake server first, then load — so history fetch has a better chance
+    warmupServer().finally(() => load());
+  }, []);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
-  const genuine = scans.filter(s => s.result === "Genuine");
-  const fake    = scans.filter(s => s.result === "Fake");
-  const avgConf = scans.length ? scans.reduce((a,s) => a + s.confidence, 0) / scans.length : 0;
+  const genuine  = scans.filter(s => s.result === "Genuine");
+  const fake     = scans.filter(s => s.result === "Fake");
+  const avgConf  = scans.length ? scans.reduce((a, s) => a + s.confidence, 0) / scans.length : 0;
   const avgScore = scans.length
-    ? scans.reduce((a,s) => a + (s.anomaly_score ?? 0), 0) / scans.length
-    : 0;
+    ? scans.reduce((a, s) => a + (s.anomaly_score ?? 0), 0) / scans.length : 0;
 
-  // confidence trend (last 20)
-  const confTrend = scans.slice(0, 20).map(s => s.confidence).reverse();
+  const confTrend  = scans.slice(0, 20).map(s => s.confidence).reverse();
   const scoreTrend = scans.slice(0, 20).map(s => Math.abs(s.anomaly_score ?? 0)).reverse();
 
-  // Average features across all scans with features
   const withFeats = scans.filter(s => s.features);
   const avgFeats  = {};
   if (withFeats.length) {
     Object.keys(withFeats[0].features || {}).forEach(k => {
-      avgFeats[k] = withFeats.reduce((a,s) => a + (s.features[k]||0), 0) / withFeats.length;
+      avgFeats[k] = withFeats.reduce((a, s) => a + (s.features[k] || 0), 0) / withFeats.length;
     });
   }
-  const featMax = Math.max(...Object.values(avgFeats));
+  const featMax = Math.max(...Object.values(avgFeats), 1);
 
-  // Feature colour map
   const featColor = k => {
     if (k.includes("_R") || k.startsWith("R_")) return "#ff6b6b";
     if (k.includes("_G") || k.startsWith("G_")) return "#51cf66";
@@ -178,15 +181,15 @@ export default function Dashboard({ onBack }) {
   let shown = scans.filter(s => {
     if (filter === "genuine" && s.result !== "Genuine") return false;
     if (filter === "fake"    && s.result !== "Fake")    return false;
-    if (search && !s.medicine_name.toLowerCase().includes(search.toLowerCase()) &&
-        !(s.batch_id||"").toLowerCase().includes(search.toLowerCase()) &&
-        !s.scan_id.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search &&
+      !s.medicine_name.toLowerCase().includes(search.toLowerCase()) &&
+      !(s.batch_id || "").toLowerCase().includes(search.toLowerCase()) &&
+      !s.scan_id.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
-  if (sortBy === "conf")  shown = [...shown].sort((a,b) => b.confidence - a.confidence);
-  if (sortBy === "score") shown = [...shown].sort((a,b) => (a.anomaly_score||0) - (b.anomaly_score||0));
+  if (sortBy === "conf")  shown = [...shown].sort((a, b) => b.confidence - a.confidence);
+  if (sortBy === "score") shown = [...shown].sort((a, b) => (a.anomaly_score || 0) - (b.anomaly_score || 0));
 
-  // ── Rate ──────────────────────────────────────────────────────────────────
   const fakeRate = scans.length ? Math.round((fake.length / scans.length) * 100) : 0;
 
   return (
@@ -203,9 +206,11 @@ export default function Dashboard({ onBack }) {
           </div>
         </div>
         <div className="dash-hdr-right">
-          <button className={`refresh-btn ${refreshing ? "spinning" : ""}`} onClick={load}>↻ Refresh</button>
+          <button className={`refresh-btn ${refreshing ? "spinning" : ""}`} onClick={load}>
+            ↻ Refresh
+          </button>
           <div className="dash-online">
-            <div className="online-dot"/>
+            <div className="online-dot" />
             <span>{scans.length} scans loaded</span>
           </div>
         </div>
@@ -213,97 +218,101 @@ export default function Dashboard({ onBack }) {
 
       <main className="dash-main">
 
+        {/* ── Fetch error banner ───────────────────────────────────────────── */}
+        {fetchError && !loading && (
+          <div className="dash-fetch-error">
+            ⚠️ {fetchError}
+            <button className="dash-retry-btn" onClick={load}>Retry</button>
+          </div>
+        )}
+
         {loading ? (
           <div className="dash-loading">
-            <div className="dash-spin"/><p>Loading scan history…</p>
+            <div className="dash-spin" />
+            <p>Loading scan history…</p>
+            <p style={{ fontSize: 12, opacity: 0.5, marginTop: 8 }}>
+              Server may be waking up — this can take ~30 seconds
+            </p>
           </div>
-        ) : scans.length === 0 ? (
+        ) : scans.length === 0 && !fetchError ? (
           <div className="dash-empty">
-            <div style={{fontSize:48}}>📭</div>
+            <div style={{ fontSize: 48 }}>📭</div>
             <h3>No Scans Yet</h3>
             <p>Go back to the scanner and analyse some tablets first.</p>
             <button className="back-btn" onClick={onBack}>Open Scanner</button>
           </div>
-        ) : (
+        ) : scans.length > 0 ? (
           <>
             {/* ── KPI row ─────────────────────────────────────────────────── */}
             <div className="kpi-row">
               <div className="kpi-card">
-                <div className="kpi-icon" style={{color:"#00c8ff"}}>⬡</div>
+                <div className="kpi-icon" style={{ color: "#00c8ff" }}>⬡</div>
                 <div className="kpi-val">{scans.length}</div>
                 <div className="kpi-label">Total Scans</div>
               </div>
               <div className="kpi-card">
-                <div className="kpi-icon" style={{color:"#00ff88"}}>✓</div>
-                <div className="kpi-val" style={{color:"#00ff88"}}>{genuine.length}</div>
+                <div className="kpi-icon" style={{ color: "#00ff88" }}>✓</div>
+                <div className="kpi-val" style={{ color: "#00ff88" }}>{genuine.length}</div>
                 <div className="kpi-label">Genuine</div>
               </div>
               <div className="kpi-card">
-                <div className="kpi-icon" style={{color:"#ff2d55"}}>✗</div>
-                <div className="kpi-val" style={{color:"#ff2d55"}}>{fake.length}</div>
+                <div className="kpi-icon" style={{ color: "#ff2d55" }}>✗</div>
+                <div className="kpi-val" style={{ color: "#ff2d55" }}>{fake.length}</div>
                 <div className="kpi-label">Counterfeit</div>
               </div>
               <div className="kpi-card">
-                <div className="kpi-icon" style={{color:"#fb923c"}}>⚠</div>
-                <div className="kpi-val" style={{color: fakeRate > 20 ? "#ff2d55" : "#fb923c"}}>{fakeRate}%</div>
+                <div className="kpi-icon" style={{ color: "#fb923c" }}>⚠</div>
+                <div className="kpi-val" style={{ color: fakeRate > 20 ? "#ff2d55" : "#fb923c" }}>
+                  {fakeRate}%
+                </div>
                 <div className="kpi-label">Fake Rate</div>
               </div>
               <div className="kpi-card">
-                <div className="kpi-icon" style={{color:"#a78bfa"}}>◎</div>
-                <div className="kpi-val" style={{color:"#a78bfa"}}>{Math.round(avgConf*100)}%</div>
+                <div className="kpi-icon" style={{ color: "#a78bfa" }}>◎</div>
+                <div className="kpi-val" style={{ color: "#a78bfa" }}>
+                  {Math.round(avgConf * 100)}%
+                </div>
                 <div className="kpi-label">Avg Confidence</div>
               </div>
               <div className="kpi-card">
-                <div className="kpi-icon" style={{color:"#00c8ff"}}>∿</div>
-                <div className="kpi-val mono" style={{color:"#00c8ff", fontSize:18}}>{avgScore.toFixed(3)}</div>
+                <div className="kpi-icon" style={{ color: "#00c8ff" }}>∿</div>
+                <div className="kpi-val mono" style={{ color: "#00c8ff", fontSize: 18 }}>
+                  {avgScore.toFixed(3)}
+                </div>
                 <div className="kpi-label">Avg Anomaly Score</div>
               </div>
             </div>
 
             {/* ── Charts row ──────────────────────────────────────────────── */}
             <div className="charts-row">
-
-              {/* Donut */}
               <div className="chart-card">
                 <div className="chart-title">Detection Breakdown</div>
                 <Donut genuine={genuine.length} fake={fake.length} />
               </div>
-
-              {/* Confidence trend */}
               <div className="chart-card">
                 <div className="chart-title">Confidence Trend (last 20)</div>
                 {confTrend.length >= 2
                   ? <Sparkline data={confTrend} color="#00c8ff" />
-                  : <p className="no-data">Need 2+ scans</p>
-                }
-                <div className="spark-labels">
-                  <span>Oldest</span><span>Latest</span>
-                </div>
+                  : <p className="no-data">Need 2+ scans</p>}
+                <div className="spark-labels"><span>Oldest</span><span>Latest</span></div>
               </div>
-
-              {/* Anomaly score trend */}
               <div className="chart-card">
                 <div className="chart-title">Anomaly Score |Abs| Trend</div>
                 {scoreTrend.length >= 2
                   ? <Sparkline data={scoreTrend} color="#ff2d55" />
-                  : <p className="no-data">Need 2+ scans</p>
-                }
-                <div className="spark-labels">
-                  <span>Oldest</span><span>Latest</span>
-                </div>
+                  : <p className="no-data">Need 2+ scans</p>}
+                <div className="spark-labels"><span>Oldest</span><span>Latest</span></div>
               </div>
-
-              {/* Genuine rate */}
               <div className="chart-card">
                 <div className="chart-title">Authentication Rate</div>
                 <div className="auth-rate-wrap">
                   <div className="auth-rate-bar">
-                    <div className="arb-fill ok-fill" style={{ height: `${100 - fakeRate}%` }} />
+                    <div className="arb-fill ok-fill"  style={{ height: `${100 - fakeRate}%` }} />
                     <div className="arb-fill bad-fill" style={{ height: `${fakeRate}%` }} />
                   </div>
                   <div className="auth-rate-labels">
-                    <span style={{color:"#00ff88"}}>{100 - fakeRate}% Genuine</span>
-                    <span style={{color:"#ff2d55"}}>{fakeRate}% Fake</span>
+                    <span style={{ color: "#00ff88" }}>{100 - fakeRate}% Genuine</span>
+                    <span style={{ color: "#ff2d55" }}>{fakeRate}% Fake</span>
                   </div>
                 </div>
               </div>
@@ -355,8 +364,7 @@ export default function Dashboard({ onBack }) {
 
               {shown.length === 0
                 ? <p className="no-data center">No scans match this filter.</p>
-                : shown.map((s, i) => <ScanRow key={s.scan_id} s={s} idx={i} />)
-              }
+                : shown.map((s, i) => <ScanRow key={s.scan_id} s={s} idx={i} />)}
 
               <div className="table-footer">
                 Showing {shown.length} of {scans.length} scans
@@ -369,8 +377,8 @@ export default function Dashboard({ onBack }) {
                 const csv = [
                   "scan_id,medicine_name,batch_id,result,confidence,anomaly_score,decision_score,timestamp",
                   ...scans.map(s =>
-                    `${s.scan_id},"${s.medicine_name}","${s.batch_id||""}",${s.result},${s.confidence},${s.anomaly_score||""},${s.decision_score||""},${s.timestamp}`
-                  )
+                    `${s.scan_id},"${s.medicine_name}","${s.batch_id || ""}",${s.result},${s.confidence},${s.anomaly_score || ""},${s.decision_score || ""},${s.timestamp}`
+                  ),
                 ].join("\n");
                 const blob = new Blob([csv], { type: "text/csv" });
                 const a = document.createElement("a");
@@ -385,7 +393,7 @@ export default function Dashboard({ onBack }) {
               </div>
             </div>
           </>
-        )}
+        ) : null}
       </main>
     </div>
   );
