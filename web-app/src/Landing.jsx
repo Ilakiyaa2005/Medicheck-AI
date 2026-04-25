@@ -235,7 +235,7 @@ export default function Landing({ onEnter }) {
           <FeatureCard icon="⚡" delay="0.2s"  title="Real-Time Detection"        desc="Upload an image and receive a result with confidence score and anomaly metrics in under 2 seconds." />
           <FeatureCard icon="📱" delay="0.3s"  title="Mobile Ready"              desc="Full React Native app with camera capture, gallery picker, and haptic feedback — works on iOS and Android." />
           <FeatureCard icon="📊" delay="0.4s"  title="Analytics Dashboard"       desc="Track detection history, monitor genuine vs. fake ratios, view feature distributions across all scans." />
-          <FeatureCard icon="🔒" delay="0.5s"  title="No Internet Required"      desc="Deploy locally. All computation happens on your machine — patient data and medicine information never leaves your network." />
+          <FeatureCard icon="🌐" delay="0.5s"  title="Cloud-Based Processing"      desc="Deployed on a secure cloud server. Tablet images are analysed remotely, enabling access from any device, anywhere." />
         </div>
       </section>
 
