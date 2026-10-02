@@ -195,7 +195,12 @@ async function validateMedicineImage(file, medicineName) {
       return;
     }
 
-    // 2. Pixel-level analysis
+    // 2. Image readability and extreme exposure validation
+    if (!file || !file.type.startsWith("image/")) {
+      resolve({ valid: false, reason: "❌ Please upload a valid image file (JPEG, PNG, or WEBP)." });
+      return;
+    }
+
     const img = new Image();
     const url = URL.createObjectURL(file);
 
@@ -209,44 +214,25 @@ async function validateMedicineImage(file, medicineName) {
       const { data } = ctx.getImageData(0, 0, 100, 100);
       const total = 10000;
 
-      let green = 0, sky = 0, skin = 0, dark = 0;
-      let sumR = 0, sumG = 0, sumB = 0;
+      let sumLuminance = 0;
+      let blackPixels = 0;
+      let whitePixels = 0;
 
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i], g = data[i + 1], b = data[i + 2];
-        sumR += r; sumG += g; sumB += b;
-        if (g > r + 40 && g > b + 40 && g > 80) green++;
-        if (b > r + 30 && b > g + 10 && b > 100) sky++;
-        if (r > 150 && g > 80 && g < 170 && b < 140 && r > g && g > b) skin++;
-        if (r < 30 && g < 30 && b < 30) dark++;
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        sumLuminance += lum;
+        if (lum < 20) blackPixels++;
+        if (lum > 250) whitePixels++;
       }
 
-      const avgR = sumR / total, avgG = sumG / total, avgB = sumB / total;
-      let uniform = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        if (
-          Math.abs(data[i] - avgR) < 40 &&
-          Math.abs(data[i+1] - avgG) < 40 &&
-          Math.abs(data[i+2] - avgB) < 40
-        ) uniform++;
-      }
+      const avgLum = sumLuminance / total;
 
-      const gPct = green / total;
-      const sPct = sky / total;
-      const kPct = skin / total;
-      const dPct = dark / total;
-      const uPct = uniform / total;
-
-      if (gPct > 0.35) {
-        resolve({ valid: false, reason: "❌ This looks like a plant, food, or nature photo. Please upload a close-up image of a tablet or capsule only." });
-      } else if (sPct > 0.30) {
-        resolve({ valid: false, reason: "❌ This looks like an outdoor or sky photo. Please upload a close-up image of a tablet or capsule only." });
-      } else if (kPct > 0.25) {
-        resolve({ valid: false, reason: "❌ This looks like a photo of a person. Please upload a close-up image of a tablet or capsule only." });
-      } else if (dPct > 0.60) {
-        resolve({ valid: false, reason: "❌ Image is too dark. Please take a photo of the tablet in good lighting on a plain white or light background." });
-      } else if (uPct < 0.15) {
-        resolve({ valid: false, reason: "❌ Image appears to be a complex scene. Please upload a close-up photo of the tablet or capsule only." });
+      // Only block truly unanalyzable images (pitch black or pure white)
+      if (avgLum < 20 || blackPixels / total > 0.85) {
+        resolve({ valid: false, reason: "❌ Image is too dark to detect a tablet. Please take a photo in good lighting." });
+      } else if (avgLum > 250 || whitePixels / total > 0.90) {
+        resolve({ valid: false, reason: "❌ Image is completely overexposed. Please adjust lighting and try again." });
       } else {
         resolve({ valid: true });
       }
