@@ -1,8 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import "./App.css";
 import { API, fetchWithTimeout, warmupServer } from "./api";
+import CameraModule from "./components/CameraModule";
+import ExplanationCard from "./components/ExplanationCard";
+import LabelScanner from "./components/LabelScanner";
+import MultiShotModule from "./components/MultiShotModule";
+import { loadHistory, saveScan, deleteScan, clearHistory, exportHistory } from "./lib/storage";
+import { checkExpiryStatus } from "./lib/expiry";
+import { assessFrameQuality } from "./lib/quality";
+import { isMedicineNameAllowed } from "./lib/medicineGuard";
 
-/* ─── tiny icon set ──────────────────────────────────────────────────────── */
+/* ─── Tiny icon set ──────────────────────────────────────────────────────── */
 const Ic = ({ d, size = 18, stroke = 2 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round">
@@ -105,7 +113,7 @@ const FeatureTable = ({ features }) => {
             <div key={k} className="feat-row">
               <span className="feat-key">{k}</span>
               <span className="feat-val" style={{ color: colorOf(k) }}>
-                {features[k].toFixed(3)}
+                {Number(features[k]).toFixed(3)}
               </span>
             </div>
           ))}
@@ -117,184 +125,81 @@ const FeatureTable = ({ features }) => {
 
 /* ─── History row ────────────────────────────────────────────────────────── */
 const HistRow = ({ s, onDelete }) => {
-  const ok = s.result === "Genuine";
+  const isOk = s.result === "Genuine";
+  const isInconc = s.result === "Inconclusive";
+  const statusColor = isInconc ? "#ffd43b" : isOk ? "var(--ok)" : "var(--bad)";
+
   return (
-    <div className={`hist-row ${ok ? "hist-ok" : "hist-bad"}`}>
-      <div className={`hist-dot ${ok ? "dot-ok" : "dot-bad"}`} />
-      <div className="hist-info">
-        <span className="hist-med">{s.medicine_name}</span>
-        {s.batch_id && <span className="hist-batch">Batch: {s.batch_id}</span>}
-        <span className="hist-time">{new Date(s.timestamp).toLocaleString()}</span>
+    <div className="hist-row">
+      {s.thumbnail ? (
+        <img src={s.thumbnail} alt="thumb" style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover" }} />
+      ) : (
+        <div className="hist-icon" style={{ color: statusColor }}>
+          <Icon name={isInconc ? "warn" : isOk ? "ok" : "warn"} size={16} />
+        </div>
+      )}
+      <div className="hist-mid">
+        <div className="hist-name">{s.medicine_name}</div>
+        <div className="hist-sub">
+          {s.batch_id ? `Batch ${s.batch_id} · ` : ""}
+          <span style={{ color: statusColor, fontWeight: 600 }}>{s.result}</span>
+          {` · ${Math.round((s.confidence || 0) * 100)}%`}
+        </div>
       </div>
-      <div className="hist-right">
-        <span className={`hist-verdict ${ok ? "hv-ok" : "hv-bad"}`}>{s.result}</span>
-        <span className="hist-conf">{Math.round(s.confidence * 100)}%</span>
-      </div>
-      <button className="hist-del" onClick={() => onDelete(s.scan_id)} title="Delete">
-        <Icon name="trash" size={13} />
+      <button className="del-btn" onClick={() => onDelete(s.scan_id)} title="Delete record">
+        <Icon name="trash" size={14} />
       </button>
     </div>
   );
 };
 
-/* ─── Camera Module ──────────────────────────────────────────────────────── */
-const CameraModule = ({ onCapture, loading }) => {
-  const videoRef    = useRef(null);
-  const canvasRef   = useRef(null);
-  const streamRef   = useRef(null);
-  const [camReady,   setCamReady]   = useState(false);
-  const [camError,   setCamError]   = useState(null);
-  const [facingMode, setFacingMode] = useState("environment");
-  const [captured,   setCaptured]   = useState(null);
-
-  const startCamera = useCallback(async (facing) => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    setCamReady(false); setCamError(null);
+/* ─── Client thumbnail creator (<= 160px JPEG) ───────────────────────────── */
+async function makeThumbnail(fileOrBlob) {
+  return new Promise((resolve) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => { videoRef.current.play(); setCamReady(true); };
-      }
-    } catch (err) {
-      setCamError(
-        err.name === "NotAllowedError" ? "Camera permission denied. Please allow camera access in your browser."
-        : err.name === "NotFoundError" ? "No camera device found on this device."
-        : `Camera error: ${err.message}`
-      );
+      const img = new Image();
+      const url = URL.createObjectURL(fileOrBlob);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement("canvas");
+        const maxDim = 140;
+        let w = img.width, h = img.height;
+        if (w > h) {
+          if (w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
+        } else {
+          if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
+        }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.65));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    } catch {
+      resolve(null);
     }
-  }, []);
+  });
+}
 
-  useEffect(() => {
-    startCamera(facingMode);
-    return () => { if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop()); };
-  }, [facingMode, startCamera]);
-
-  const flipCamera   = () => { setCaptured(null); setFacingMode(f => f === "environment" ? "user" : "environment"); };
-  const capturePhoto = () => {
-    const video = videoRef.current, canvas = canvasRef.current;
-    if (!video || !canvas) return;
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (facingMode === "user") { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    setCaptured(canvas.toDataURL("image/jpeg", 0.92));
-  };
-  const retake   = () => setCaptured(null);
-  const usePhoto = () => {
-    if (!captured) return;
-    const byteString = atob(captured.split(",")[1]);
-    const mimeString = captured.split(",")[0].split(":")[1].split(";")[0];
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    const blob = new Blob([ab], { type: mimeString });
-    const file = new File([blob], `tablet_capture_${Date.now()}.jpg`, { type: mimeString });
-    onCapture(file, captured);
-  };
-
-  if (camError) return (
-    <div className="cam-error">
-      <Icon name="warn" size={28} /><p>{camError}</p>
-      <button className="btn-ghost" onClick={() => startCamera(facingMode)}>Retry</button>
-    </div>
-  );
-
-  return (
-    <div className="cam-wrap">
-      <div className="cam-viewport">
-        <video ref={videoRef} autoPlay playsInline muted className="cam-video"
-          style={{ display: captured ? "none" : "block", transform: facingMode === "user" ? "scaleX(-1)" : "none" }} />
-        {captured && <img src={captured} alt="Captured tablet" className="cam-snapshot" />}
-        {!camReady && !captured && (
-          <div className="cam-loading">
-            <span className="spin-sm" style={{ width: 24, height: 24, borderWidth: 3 }} />
-            <span>Starting camera…</span>
-          </div>
-        )}
-        {camReady && !captured && (
-          <div className="cam-overlay" aria-hidden="true">
-            <div className="cam-bracket tl" /><div className="cam-bracket tr" />
-            <div className="cam-bracket bl" /><div className="cam-bracket br" />
-            <div className="cam-guide">Position tablet in frame</div>
-          </div>
-        )}
-        {loading && captured && <ScanLine />}
-      </div>
-      <canvas ref={canvasRef} style={{ display: "none" }} />
-      <div className="cam-controls">
-        {!captured ? (
-          <>
-            <button className="cam-flip-btn" onClick={flipCamera} title="Flip camera" disabled={!camReady}>
-              <Icon name="flip" size={18} />
-            </button>
-            <button className="cam-shutter" onClick={capturePhoto} disabled={!camReady} title="Take photo">
-              <Icon name="capture" size={28} />
-            </button>
-            <div style={{ width: 44 }} />
-          </>
-        ) : (
-          <>
-            <button className="cam-flip-btn" onClick={retake} title="Retake">
-              <Icon name="retake" size={18} />
-              <span style={{ fontSize: 11, marginTop: 2 }}>Retake</span>
-            </button>
-            <button className="btn-primary cam-use-btn" onClick={usePhoto}>
-              <Icon name="ok" size={16} /> Use Photo
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
-
-/* ─── Medicine image validator ───────────────────────────────────────────────
-   Pure browser-side pixel analysis — no API key, no cost, instant.
-
-   Checks:
-   1. Medicine name keyword guard  (rejects "food", "chicken", "cat" etc.)
-   2. Pixel colour distribution:
-      • Too much green  → plant / vegetable / nature
-      • Too much sky-blue → outdoor scene
-      • Too much skin tone → selfie / person
-      • Too dark overall  → not a tablet on a plain background
-      • Too low uniformity → busy complex scene, not a tablet close-up
-────────────────────────────────────────────────────────────────────────────── */
+/* ─── Pre-flight image & name validation ─────────────────────────────────── */
 async function validateMedicineImage(file, medicineName) {
   return new Promise((resolve) => {
-
-    // ── 1. Medicine name keyword guard (whole-word matching only) ─────────────
-    const BAD_KEYWORDS = new Set([
-      "food","fruit","vegetable","animal","cat","dog","bird","flower",
-      "tree","car","phone","laptop","person","face","selfie","nature",
-      "sky","beach","mountain","river","sea","chicken","rice","curry",
-      "coffee","tea","juice","cake","pizza","burger","fish","egg",
-      "plant","grass","leaf","water","drink","snack","biscuit","bread",
-    ]);
-    const words = medicineName.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-    const matchedBad = words.find(w => BAD_KEYWORDS.has(w));
-    if (matchedBad) {
+    // 1. Whole-word keyword guard
+    const nameCheck = isMedicineNameAllowed(medicineName);
+    if (!nameCheck.allowed) {
       resolve({
         valid: false,
-        reason: `❌ "${medicineName}" doesn't look like a medicine name (matched non-medicine term: "${matchedBad}"). Please enter the correct tablet or capsule name.`,
+        reason: `❌ "${medicineName}" doesn't look like a medicine name (matched non-medicine term: "${nameCheck.matchedTerm}"). Please enter the correct tablet or capsule name.`,
       });
       return;
     }
 
-    // ── 2. Pixel-level analysis ──────────────────────────────────────────────
+    // 2. Pixel-level analysis
     const img = new Image();
     const url = URL.createObjectURL(file);
 
     img.onload = () => {
-      // Sample at 100×100 for speed
       const canvas = document.createElement("canvas");
       canvas.width = 100; canvas.height = 100;
       const ctx = canvas.getContext("2d");
@@ -302,7 +207,7 @@ async function validateMedicineImage(file, medicineName) {
       URL.revokeObjectURL(url);
 
       const { data } = ctx.getImageData(0, 0, 100, 100);
-      const total = 10000; // 100×100
+      const total = 10000;
 
       let green = 0, sky = 0, skin = 0, dark = 0;
       let sumR = 0, sumG = 0, sumB = 0;
@@ -310,28 +215,26 @@ async function validateMedicineImage(file, medicineName) {
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i], g = data[i + 1], b = data[i + 2];
         sumR += r; sumG += g; sumB += b;
-        if (g > r + 40 && g > b + 40 && g > 80)              green++;  // vivid green
-        if (b > r + 30 && b > g + 10 && b > 100)             sky++;    // sky blue
-        if (r > 150 && g > 80 && g < 170 && b < 140 && r > g && g > b) skin++; // skin
-        if (r < 30  && g < 30  && b < 30)                    dark++;   // near-black
+        if (g > r + 40 && g > b + 40 && g > 80) green++;
+        if (b > r + 30 && b > g + 10 && b > 100) sky++;
+        if (r > 150 && g > 80 && g < 170 && b < 140 && r > g && g > b) skin++;
+        if (r < 30 && g < 30 && b < 30) dark++;
       }
 
       const avgR = sumR / total, avgG = sumG / total, avgB = sumB / total;
-
-      // Count pixels within ±40 of the average colour (uniform tablet surface)
       let uniform = 0;
       for (let i = 0; i < data.length; i += 4) {
         if (
-          Math.abs(data[i]   - avgR) < 40 &&
+          Math.abs(data[i] - avgR) < 40 &&
           Math.abs(data[i+1] - avgG) < 40 &&
           Math.abs(data[i+2] - avgB) < 40
         ) uniform++;
       }
 
-      const gPct = green   / total;
-      const sPct = sky     / total;
-      const kPct = skin    / total;
-      const dPct = dark    / total;
+      const gPct = green / total;
+      const sPct = sky / total;
+      const kPct = skin / total;
+      const dPct = dark / total;
       const uPct = uniform / total;
 
       if (gPct > 0.35) {
@@ -358,50 +261,98 @@ async function validateMedicineImage(file, medicineName) {
   });
 }
 
-/* ─── Main App ───────────────────────────────────────────────────────────── */
+/* ─── Main App Component ─────────────────────────────────────────────────── */
 export default function App() {
-  const [file,         setFile]         = useState(null);
-  const [preview,      setPreview]      = useState(null);
-  const [medicine,     setMedicine]     = useState("");
-  const [batchId,      setBatchId]      = useState("");
-  const [loading,      setLoading]      = useState(false);
-  const [validating,   setValidating]   = useState(false);
-  const [result,       setResult]       = useState(null);
-  const [error,        setError]        = useState(null);
-  const [history,      setHistory]      = useState([]);
-  const [histOpen,     setHistOpen]     = useState(false);
-  const [featOpen,     setFeatOpen]     = useState(false);
-  const [inputMode,    setInputMode]    = useState("upload");
+  const [scanMode, setScanMode] = useState("quick"); // 'quick' | 'accurate'
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [medicine, setMedicine] = useState("");
+  const [batchId, setBatchId] = useState("");
+  const [scannedBatch, setScannedBatch] = useState(null);
+  const [expiryDate, setExpiryDate] = useState("");
+  const [expiryStatus, setExpiryStatus] = useState(null);
+
+  const [loading, setLoading] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [uploadWarning, setUploadWarning] = useState(null);
+
+  const [history, setHistory] = useState([]);
+  const [histOpen, setHistOpen] = useState(false);
+  const [featOpen, setFeatOpen] = useState(false);
   const [serverStatus, setServerStatus] = useState("unknown");
+
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [showLabelScanner, setShowLabelScanner] = useState(false);
+  const [shotType, setShotType] = useState("unknown");
+
   const fileRef = useRef();
+
+  // Load history from private localStorage and sync
+  const refreshHistory = useCallback(() => {
+    const list = loadHistory();
+    setHistory(list);
+  }, []);
 
   useEffect(() => {
     setServerStatus("waking");
     warmupServer().then(() => setServerStatus("online")).catch(() => setServerStatus("offline"));
-    fetchWithTimeout(`${API}/history`, {}, 15000, 1)
-      .then(r => r.json())
-      .then(d => { setHistory(d.scans || []); setServerStatus("online"); })
-      .catch(() => setServerStatus("waking"));
-  }, []);
+    refreshHistory();
 
+    const handleSync = () => refreshHistory();
+    window.addEventListener("storage", handleSync);
+    window.addEventListener("medicheck-storage-update", handleSync);
+    return () => {
+      window.removeEventListener("storage", handleSync);
+      window.removeEventListener("medicheck-storage-update", handleSync);
+    };
+  }, [refreshHistory]);
+
+  // Handle Expiry Date change
+  const handleExpiryChange = (val) => {
+    setExpiryDate(val);
+    if (val) {
+      setExpiryStatus(checkExpiryStatus(val));
+    } else {
+      setExpiryStatus(null);
+    }
+  };
+
+  // Pre-flight file upload & local quality check
   const handleFile = useCallback((f) => {
     if (!f || !f.type.startsWith("image/")) return;
-    setFile(f); setPreview(URL.createObjectURL(f)); setResult(null); setError(null);
-  }, []);
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+    setResult(null);
+    setError(null);
+    setUploadWarning(null);
 
-  const handleCameraCapture = useCallback((file, dataUrl) => {
-    setFile(file); setPreview(dataUrl); setResult(null); setError(null);
-    setInputMode("upload");
+    // Run client quality check on 160x120 canvas
+    const img = new Image();
+    const url = URL.createObjectURL(f);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = 160; canvas.height = 120;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, 160, 120);
+      const assessment = assessFrameQuality(ctx.getImageData(0, 0, 160, 120));
+      if (!assessment.ok) {
+        setUploadWarning(`Note: ${assessment.issue}. For highest accuracy, ensure steady lighting and sharp focus.`);
+      }
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
   }, []);
 
   const onDrop = (e) => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); };
 
-  // ── Analyse ───────────────────────────────────────────────────────────────
+  // Single-shot prediction
   const analyze = async () => {
     if (!medicine.trim()) { setError("Please enter the medicine name before analysing."); return; }
-    if (!file)            { setError("Upload or capture a tablet image first."); return; }
+    if (!file) { setError("Upload or capture a tablet image first."); return; }
 
-    // Step 1 — Validate image
     setValidating(true); setError(null); setResult(null);
     const validation = await validateMedicineImage(file, medicine);
     setValidating(false);
@@ -411,19 +362,29 @@ export default function App() {
       return;
     }
 
-    // Step 2 — Send to backend
     setLoading(true); setError(null);
     const form = new FormData();
     form.append("image", file);
-    form.append("medicine_name", medicine || "Unknown");
-    form.append("batch_id", batchId || "");
+    form.append("medicine_name", medicine.trim());
+    form.append("batch_id", batchId.trim());
+    form.append("shot_type", shotType || "unknown");
 
     try {
-      const res  = await fetchWithTimeout(`${API}/predict`, { method: "POST", body: form }, 30000, 2);
+      const res = await fetchWithTimeout(`${API}/predict`, { method: "POST", body: form }, 30000, 2);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Server error");
-      setResult(data); setServerStatus("online");
-      setHistory(p => [data, ...p].slice(0, 100));
+
+      // Generate local thumbnail and save to private localStorage
+      const thumb = await makeThumbnail(file);
+      const scanRecord = {
+        ...data,
+        thumbnail: thumb,
+        expiry: expiryDate,
+      };
+      saveScan(scanRecord);
+      setResult(data);
+      setServerStatus("online");
+      refreshHistory();
     } catch (e) {
       setError(e.message.includes("unreachable")
         ? "⏳ Server is waking up (free tier). Please wait ~30 seconds and try again."
@@ -434,16 +395,69 @@ export default function App() {
     }
   };
 
-  const clear = () => { setFile(null); setPreview(null); setResult(null); setError(null); };
+  // Multi-shot prediction
+  const handleMultiSubmit = async (shotsArray) => {
+    if (!medicine.trim()) {
+      setError("Please enter the medicine name before analysing.");
+      return;
+    }
 
-  const delScan = async (id) => {
-    try { await fetchWithTimeout(`${API}/history/${id}`, { method: "DELETE" }, 10000, 1); } catch (_) {}
-    setHistory(p => p.filter(s => s.scan_id !== id));
+    setLoading(true); setError(null); setResult(null);
+
+    const form = new FormData();
+    shotsArray.forEach((s) => {
+      form.append("images", s.file);
+    });
+
+    const shotsMeta = shotsArray.map((s) => ({
+      shot_type: s.shot_type,
+      angle: s.angle,
+    }));
+    form.append("shots_meta", JSON.stringify(shotsMeta));
+    form.append("medicine_name", medicine.trim());
+    form.append("batch_id", batchId.trim());
+
+    try {
+      const res = await fetchWithTimeout(`${API}/predict-multi`, { method: "POST", body: form }, 45000, 2);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Server error during multi-shot inference");
+
+      // Generate local thumbnail from first shot
+      const thumb = await makeThumbnail(shotsArray[0].file);
+      const scanRecord = {
+        ...data,
+        thumbnail: thumb,
+        expiry: expiryDate,
+      };
+      saveScan(scanRecord);
+      setResult(data);
+      setServerStatus("online");
+      refreshHistory();
+    } catch (e) {
+      setError(e.message.includes("unreachable")
+        ? "⏳ Server is waking up. Please wait ~30 seconds and try again."
+        : e.message);
+      setServerStatus("waking");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const isGenuine    = result?.result === "Genuine";
-  const verdictColor = result ? (isGenuine ? "var(--ok)" : "var(--bad)") : "transparent";
-  const isBusy       = loading || validating;
+  const clear = () => {
+    setFile(null); setPreview(null); setResult(null); setError(null); setUploadWarning(null);
+  };
+
+  const delScan = (id) => {
+    deleteScan(id);
+    refreshHistory();
+  };
+
+  const isGenuine = result?.result === "Genuine";
+  const isInconclusive = result?.result === "Inconclusive";
+  const verdictColor = result
+    ? isInconclusive ? "#ffd43b" : isGenuine ? "var(--ok)" : "var(--bad)"
+    : "transparent";
+  const isBusy = loading || validating;
 
   return (
     <div className="app">
@@ -457,8 +471,8 @@ export default function App() {
         <div className="hdr-left">
           <div className="logo-mark"><div className="logo-hex"><Icon name="pill" size={20} /></div></div>
           <div>
-            <div className="logo-title">SPECTRAAUTH</div>
-            <div className="logo-sub">Computational Spectral Authentication · Anomaly Detection</div>
+            <div className="logo-title">SPECTRAAUTH v2</div>
+            <div className="logo-sub">Computational Spectral Authentication · Explainable AI</div>
           </div>
         </div>
         <div className="hdr-right">
@@ -467,7 +481,7 @@ export default function App() {
             {serverStatus === "online" ? "API Online" : serverStatus === "waking" ? "Waking up…" : serverStatus === "offline" ? "Offline" : "Connecting…"}
           </span>
           <button className="hist-btn" onClick={() => setHistOpen(v => !v)}>
-            <Icon name="clock" size={16} /> History
+            <Icon name="clock" size={16} /> Device History
             {history.length > 0 && <span className="badge">{history.length}</span>}
           </button>
         </div>
@@ -476,90 +490,224 @@ export default function App() {
       {/* ── Main grid ────────────────────────────────────────────────────── */}
       <main className="grid">
         <section className="card upload-card">
-          <div className="card-title"><Icon name="scan" /> Spectral Scan</div>
+          <div className="card-title">
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Icon name="scan" />
+              <span>Spectral Tablet Scan</span>
+            </div>
+            <button
+              type="button"
+              className="scanner-trigger-btn"
+              onClick={() => setShowLabelScanner(v => !v)}
+              title="Scan packaging label or barcode"
+            >
+              🏷️ {showLabelScanner ? "Hide Scanner" : "Scan Label / QR"}
+            </button>
+          </div>
 
-          <div className="fields">
+          {/* Mode Switcher */}
+          <div className="scan-mode-selector">
+            <button
+              type="button"
+              className={`scan-mode-btn ${scanMode === "quick" ? "active" : ""}`}
+              onClick={() => setScanMode("quick")}
+            >
+              ⚡ Quick Scan (1 Photo)
+            </button>
+            <button
+              type="button"
+              className={`scan-mode-btn ${scanMode === "accurate" ? "active" : ""}`}
+              onClick={() => setScanMode("accurate")}
+            >
+              🎯 Accurate Scan (2-3 Photos)
+            </button>
+          </div>
+
+          {/* Expired Medicine Red Banner (Independent of verdict) */}
+          {expiryStatus?.status === "expired" && (
+            <div className="expired-alert-banner">
+              <span style={{ fontSize: "1.3rem" }}>⚠️</span>
+              <div>
+                <b>EXPIRED MEDICINE WARNING:</b> This medicine reached its expiry date on{" "}
+                <b>{expiryStatus.formattedExpiry}</b>. Do NOT consume under any circumstances.
+              </div>
+            </div>
+          )}
+
+          {/* Label & Barcode Scanner Panel */}
+          {showLabelScanner && (
+            <LabelScanner
+              onBatchSelected={(b) => {
+                setBatchId(b);
+                setScannedBatch(b);
+              }}
+              onExpirySelected={(e) => handleExpiryChange(e)}
+              onClose={() => setShowLabelScanner(false)}
+            />
+          )}
+
+          {/* Metadata Fields */}
+          <div className="fields" style={{ marginTop: "0.75rem" }}>
             <label className="lbl">
               Medicine Name<span className="star">*</span>
-              <input className="inp" placeholder="e.g. Paracetamol 500mg"
-                value={medicine} onChange={e => setMedicine(e.target.value)} />
+              <input
+                className="inp"
+                placeholder="e.g. Paracetamol 500mg, Carvedilol, Amoxicillin"
+                value={medicine}
+                onChange={e => setMedicine(e.target.value)}
+              />
             </label>
-            <label className="lbl">Batch ID (optional)
-              <input className="inp" placeholder="e.g. BT-2024-001"
-                value={batchId} onChange={e => setBatchId(e.target.value)} />
-            </label>
+
+            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+              <label className="lbl" style={{ flex: 1, minWidth: "140px" }}>
+                Batch ID (optional)
+                <input
+                  className="inp"
+                  placeholder="e.g. INP24CT69 or XEB0005"
+                  value={batchId}
+                  onChange={e => setBatchId(e.target.value)}
+                />
+                {scannedBatch && batchId && scannedBatch !== batchId && (
+                  <div className="batch-mismatch-note">
+                    ℹ️ Note: Edited batch differs from scanned label ({scannedBatch})
+                  </div>
+                )}
+              </label>
+
+              <label className="lbl" style={{ flex: 1, minWidth: "140px" }}>
+                Expiry Date
+                <div style={{ position: "relative" }}>
+                  <input
+                    className="inp"
+                    placeholder="e.g. 08/2027"
+                    value={expiryDate}
+                    onChange={e => handleExpiryChange(e.target.value)}
+                  />
+                  {expiryStatus && expiryStatus.status !== "unknown" && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        right: "8px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        background:
+                          expiryStatus.status === "valid" ? "rgba(0,168,107,0.15)" :
+                          expiryStatus.status === "expiring_soon" ? "rgba(217,119,6,0.15)" : "rgba(224,40,74,0.15)",
+                        color:
+                          expiryStatus.status === "valid" ? "var(--ok)" :
+                          expiryStatus.status === "expiring_soon" ? "#d97706" : "var(--bad)",
+                      }}
+                    >
+                      {expiryStatus.status === "valid" ? "Valid" : expiryStatus.status === "expiring_soon" ? "Expiring soon" : "Expired"}
+                    </span>
+                  )}
+                </div>
+              </label>
+            </div>
           </div>
 
-          <div className="input-tabs">
-            <button className={`input-tab ${inputMode === "upload" ? "input-tab-active" : ""}`} onClick={() => setInputMode("upload")}>
-              <Icon name="upload" size={14} /> Upload
-            </button>
-            <button className={`input-tab ${inputMode === "camera" ? "input-tab-active" : ""}`} onClick={() => setInputMode("camera")}>
-              <Icon name="camera" size={14} /> Camera
-            </button>
-          </div>
+          {/* Mode 1: Quick Scan */}
+          {scanMode === "quick" && (
+            <div style={{ marginTop: "1rem" }}>
+              <div className="input-tabs">
+                <button
+                  type="button"
+                  className="input-tab input-tab-active"
+                  style={{ pointerEvents: "none" }}
+                >
+                  <Icon name="upload" size={14} /> Quick Capture / Upload
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ padding: "4px 12px", fontSize: "12px", borderColor: "var(--accent)", color: "var(--accent)" }}
+                  onClick={() => setShowCameraModal(true)}
+                >
+                  📷 Open Live Camera Guidance
+                </button>
+              </div>
 
-          {inputMode === "upload" && (
-            <>
-              <div className={`drop ${preview ? "drop-filled" : ""}`}
-                onDrop={onDrop} onDragOver={e => e.preventDefault()}
-                onClick={() => !preview && fileRef.current.click()}>
+              {/* Upload Drop Zone */}
+              <div
+                className={`drop ${preview ? "drop-filled" : ""}`}
+                onDrop={onDrop}
+                onDragOver={e => e.preventDefault()}
+                onClick={() => !preview && fileRef.current.click()}
+              >
                 {preview ? (
                   <>
                     <img src={preview} alt="tablet" className="drop-img" />
                     {isBusy && <ScanLine />}
                     <div className="drop-overlay">
-                      <button className="chg-btn" onClick={e => { e.stopPropagation(); fileRef.current.click(); }}>Change Image</button>
+                      <button className="chg-btn" onClick={e => { e.stopPropagation(); fileRef.current.click(); }}>
+                        Change Image
+                      </button>
                     </div>
                   </>
                 ) : (
                   <div className="drop-idle">
                     <div className="drop-icon-wrap"><Icon name="upload" size={30} /></div>
-                    <p className="drop-title">Drop tablet image here</p>
+                    <p className="drop-title">Drop tablet image here or open camera</p>
                     <p className="drop-hint">JPG · PNG · WEBP · click to browse</p>
-                    <p className="drop-hint" style={{ marginTop: 6, color: "rgba(255,255,255,0.3)", fontSize: 11 }}>
-                      ⚠️ Only tablet / capsule / medicine strip images accepted
+                    <p className="drop-hint" style={{ marginTop: 6, color: "var(--muted)", fontSize: 11 }}>
+                      Position tablet centered on plain light background
                     </p>
                   </div>
                 )}
               </div>
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => handleFile(e.target.files[0])} />
-            </>
-          )}
 
-          {inputMode === "camera" && (
-            <CameraModule onCapture={handleCameraCapture} loading={isBusy} />
-          )}
-
-          {inputMode === "upload" && (
-            <div className="btn-row">
-              <button className="btn-primary" onClick={analyze} disabled={isBusy || !file || !medicine.trim()}>
-                {validating
-                  ? <><span className="spin-sm" />Validating image…</>
-                  : loading
-                  ? <><span className="spin-sm" />Analysing…</>
-                  : <><Icon name="scan" size={16} />Run Spectral Analysis</>}
-              </button>
-              {(file || result) && (
-                <button className="btn-ghost" onClick={clear} title="Clear"><Icon name="x" size={18} /></button>
+              {uploadWarning && (
+                <div style={{ marginTop: "0.5rem", fontSize: "0.82rem", color: "#d97706", padding: "6px 10px", background: "rgba(217,119,6,0.08)", borderRadius: "6px" }}>
+                  ⚠️ {uploadWarning}
+                </div>
               )}
+
+              <div className="btn-row" style={{ marginTop: "1rem" }}>
+                <button className="btn-primary" onClick={analyze} disabled={isBusy || !file || !medicine.trim()}>
+                  {validating
+                    ? <><span className="spin-sm" />Validating image…</>
+                    : loading
+                    ? <><span className="spin-sm" />Analysing Spectral Signature…</>
+                    : <><Icon name="scan" size={16} />Run Authentication</>}
+                </button>
+                {(file || result) && (
+                  <button className="btn-ghost" onClick={clear} title="Clear"><Icon name="x" size={18} /></button>
+                )}
+              </div>
             </div>
           )}
 
-          {inputMode === "upload" && error && (
-            <div className="err-box"><Icon name="warn" size={15} />{error}</div>
+          {/* Mode 2: Multi-Shot Mode */}
+          {scanMode === "accurate" && (
+            <MultiShotModule
+              medicineName={medicine}
+              batchId={batchId}
+              isSubmitting={loading}
+              onSubmitMulti={handleMultiSubmit}
+            />
+          )}
+
+          {error && (
+            <div className="err-box" style={{ marginTop: "1rem" }}>
+              <Icon name="warn" size={15} />{error}
+            </div>
           )}
 
           {result?.features && (
             <button className="feat-toggle" onClick={() => setFeatOpen(v => !v)}>
               <Icon name="chart" size={14} />
-              {featOpen ? "Hide" : "Show"} Extracted Features ({Object.keys(result.features).length})
+              {featOpen ? "Hide" : "Show"} Raw Spectral Feature Matrix ({Object.keys(result.features).length})
             </button>
           )}
           {featOpen && result?.features && <FeatureTable features={result.features} />}
         </section>
 
-        {/* RIGHT — Result */}
+        {/* RIGHT — Result & Explainability */}
         <section className="card result-card">
           <div className="card-title"><Icon name="eye" /> Analysis Result</div>
 
@@ -570,10 +718,11 @@ export default function App() {
                 <div className="idle-core"><Icon name="pill" size={28} /></div>
               </div>
               <h3>Ready to Authenticate</h3>
-              <p>Upload or capture a tablet image. The Isolation Forest model will compare its spectral signature against the genuine profile and flag anomalies.</p>
+              <p>Upload a tablet photo or open the live guidance camera. The condition-specific Isolation Forest model inspects 17 colorimetric, GLCM texture, and optical reflectance parameters.</p>
               <div className="method-chips">
-                <span className="chip">Anomaly Detection</span>
-                <span className="chip">Medicine Only</span>
+                <span className="chip">Explainable AI</span>
+                <span className="chip">Optical Anomaly Detection</span>
+                <span className="chip">Multi-Shot Support</span>
               </div>
             </div>
           )}
@@ -585,7 +734,7 @@ export default function App() {
                 <Icon name="eye" size={24} />
               </div>
               <p className="loading-txt">Validating image…</p>
-              <p className="loading-sub">Checking this is a medicine / tablet image</p>
+              <p className="loading-sub">Checking tablet presence and framing</p>
             </div>
           )}
 
@@ -595,11 +744,8 @@ export default function App() {
                 <div className="l-ring l1" /><div className="l-ring l2" /><div className="l-ring l3" />
                 <Icon name="scan" size={24} />
               </div>
-              <p className="loading-txt">Extracting spectral features…</p>
-              <p className="loading-sub">Running Isolation Forest anomaly detection</p>
-              <p className="loading-sub" style={{ marginTop: 8, opacity: 0.5, fontSize: 11 }}>
-                First request may take ~30 s if server was sleeping
-              </p>
+              <p className="loading-txt">Extracting 17 spectral features…</p>
+              <p className="loading-sub">Scoring with condition-specific Isolation Forest</p>
             </div>
           )}
 
@@ -608,8 +754,8 @@ export default function App() {
               <div className="verdict-banner" style={{ "--vc": verdictColor }}>
                 <PulseRing color={verdictColor} />
                 <div className="verdict-center">
-                  <div className={`verdict-icon ${isGenuine ? "vi-ok" : "vi-bad"}`}>
-                    <Icon name={isGenuine ? "ok" : "warn"} size={32} stroke={2} />
+                  <div className={`verdict-icon ${isInconclusive ? "vi-warn" : isGenuine ? "vi-ok" : "vi-bad"}`}>
+                    <Icon name={isInconclusive ? "warn" : isGenuine ? "ok" : "warn"} size={32} stroke={2} />
                   </div>
                   <div className="verdict-text" style={{ color: verdictColor }}>{result.result}</div>
                   <div className="verdict-med">{result.medicine_name}</div>
@@ -618,63 +764,100 @@ export default function App() {
                 </div>
               </div>
 
-              {!isGenuine && (
+              {result.alert && (
                 <div className="alert-banner">
                   <Icon name="warn" size={18} /><span>{result.alert}</span>
                 </div>
               )}
 
               <div className="scores-row">
-                <Gauge value={result.confidence} color={verdictColor}
-                  label={isGenuine ? "Genuine Match" : "Anomaly Detected"} />
+                <Gauge
+                  value={result.confidence}
+                  color={verdictColor}
+                  label={isInconclusive ? "Uncertain Reading" : isGenuine ? "Genuine Match" : "Anomaly Detected"}
+                />
                 <div className="score-details">
-                  <div className="score-item"><span className="si-label">Anomaly Score</span><span className="si-val mono">{result.anomaly_score}</span></div>
                   <div className="score-item"><span className="si-label">Decision Score</span><span className="si-val mono">{result.decision_score}</span></div>
+                  <div className="score-item"><span className="si-label">Anomaly Score</span><span className="si-val mono">{result.anomaly_score}</span></div>
                   <div className="score-item">
-                    <span className="si-label">Label Code</span>
+                    <span className="si-label">Model Condition</span>
                     <span className="si-val mono" style={{ color: verdictColor }}>
-                      {result.label_code === 1 ? "+1 (Genuine)" : "−1 (Anomaly)"}
+                      {result.model?.condition || "standard"}
                     </span>
                   </div>
+                  {result.agreement !== undefined && (
+                    <div className="score-item">
+                      <span className="si-label">Shots Agreement</span>
+                      <span className="si-val mono">{Math.round(result.agreement * 100)}%</span>
+                    </div>
+                  )}
                   <div className="score-item">
                     <span className="si-label">Timestamp</span>
-                    <span className="si-val mono" style={{ fontSize: 11 }}>{new Date(result.timestamp).toLocaleString()}</span>
+                    <span className="si-val mono" style={{ fontSize: 11 }}>{new Date(result.timestamp).toLocaleTimeString()}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="scale-wrap">
-                <div className="scale-labels">
-                  <span style={{ color: "var(--ok)" }}>Genuine</span>
-                  <span style={{ color: "var(--bad)" }}>Counterfeit</span>
-                </div>
-                <div className="scale-track">
-                  <div className="scale-fill ok-fill" style={{ width: "50%" }} />
-                  <div className="scale-fill bad-fill" style={{ width: "50%" }} />
-                  <div className="scale-pointer" style={{
-                    left: isGenuine
-                      ? `${Math.round((1 - result.confidence) * 50)}%`
-                      : `${Math.round(50 + result.confidence * 50)}%`,
-                    background: verdictColor,
-                  }} />
-                </div>
-                <div className="scale-mid-label">Decision boundary</div>
-              </div>
+              {/* Explainable AI Diagnostics Card (Feature F2) */}
+              {result.explanation && (
+                <ExplanationCard explanation={result.explanation} isGenuine={isGenuine} />
+              )}
             </div>
           )}
         </section>
       </main>
 
-      {/* ── History Drawer ───────────────────────────────────────────────── */}
+      {/* ── Live Guidance Camera Modal (Feature F1) ── */}
+      {showCameraModal && (
+        <CameraModule
+          activeShotType={shotType}
+          onCapture={(capturedFile, capturedShotType) => {
+            handleFile(capturedFile);
+            setShotType(capturedShotType);
+            setShowCameraModal(false);
+          }}
+          onClose={() => setShowCameraModal(false)}
+        />
+      )}
+
+      {/* ── Private Device History Drawer (Feature F5) ── */}
       {histOpen && (
         <div className="drawer-bg" onClick={() => setHistOpen(false)}>
           <aside className="drawer" onClick={e => e.stopPropagation()}>
             <div className="drawer-head">
-              <span><Icon name="clock" size={16} /> Scan History</span>
+              <span><Icon name="clock" size={16} /> Device Scan History</span>
               <button onClick={() => setHistOpen(false)}><Icon name="x" size={20} /></button>
             </div>
+
+            <div style={{ padding: "0.5rem 1rem", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem", color: "var(--muted)" }}>
+              <span>🔒 Stored on this device only</span>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  type="button"
+                  style={{ background: "transparent", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: "0.78rem" }}
+                  onClick={exportHistory}
+                >
+                  ⬇ Export
+                </button>
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    style={{ background: "transparent", border: "none", color: "var(--bad)", cursor: "pointer", fontSize: "0.78rem" }}
+                    onClick={() => {
+                      if (window.confirm("Clear all private history on this device?")) {
+                        clearHistory();
+                        refreshHistory();
+                      }
+                    }}
+                  >
+                    🗑 Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
             {history.length === 0
-              ? <p className="no-hist">No scans yet.</p>
+              ? <p className="no-hist">No scans yet. Authenticate tablets to populate local history.</p>
               : history.map(s => <HistRow key={s.scan_id} s={s} onDelete={delScan} />)}
           </aside>
         </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import "./Dashboard.css";
-import { API, fetchWithTimeout, warmupServer } from "./api";
+import { loadHistory, clearHistory, exportHistory } from "./lib/storage";
 
 /* ── Mini donut chart ────────────────────────────────────────────────────── */
 function Donut({ genuine, fake }) {
@@ -125,28 +125,23 @@ export default function Dashboard({ onBack }) {
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState(null);    // ← new: surface load errors
 
-  const load = async () => {
+  const load = () => {
     setRefreshing(true);
-    setFetchError(null);
-    try {
-      // 20 s timeout, 2 retries — handles Render cold-start
-      const r = await fetchWithTimeout(`${API}/history?limit=200`, {}, 20000, 2);
-      const d = await r.json();
-      setScans(d.scans || []);
-    } catch (err) {
-      setFetchError(
-        err.message.includes("unreachable")
-          ? "⏳ Server is waking up. Please wait ~30 seconds and click Refresh."
-          : `Failed to load: ${err.message}`
-      );
-    }
+    const list = loadHistory();
+    setScans(list);
     setLoading(false);
     setRefreshing(false);
   };
 
   useEffect(() => {
-    // Wake server first, then load — so history fetch has a better chance
-    warmupServer().finally(() => load());
+    load();
+    const handleStorage = () => load();
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("medicheck-storage-update", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("medicheck-storage-update", handleStorage);
+    };
   }, []);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
@@ -205,18 +200,39 @@ export default function Dashboard({ onBack }) {
             Analytics Dashboard
           </div>
         </div>
-        <div className="dash-hdr-right">
+        <div className="dash-hdr-right" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <button className="dash-action-btn" onClick={exportHistory} title="Export JSON backup">
+            ⬇ Export JSON
+          </button>
+          {scans.length > 0 && (
+            <button
+              className="dash-action-btn danger"
+              onClick={() => {
+                if (window.confirm("Are you sure you want to clear all scan history from this device? This cannot be undone.")) {
+                  clearHistory();
+                  load();
+                }
+              }}
+              title="Clear all history on device"
+            >
+              🗑 Clear
+            </button>
+          )}
           <button className={`refresh-btn ${refreshing ? "spinning" : ""}`} onClick={load}>
             ↻ Refresh
           </button>
           <div className="dash-online">
             <div className="online-dot" />
-            <span>{scans.length} scans loaded</span>
+            <span>🔒 On-Device ({scans.length})</span>
           </div>
         </div>
       </header>
 
       <main className="dash-main">
+        <div style={{ margin: "0.5rem 0 1.25rem", padding: "0.65rem 1rem", background: "rgba(0, 255, 136, 0.05)", border: "1px solid rgba(0, 255, 136, 0.2)", borderRadius: "8px", fontSize: "0.82rem", color: "#cde8f5", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span>🔒</span>
+          <span><b>Device Privacy:</b> History is stored only on this device. No scan records or images are saved on the server.</span>
+        </div>
 
         {/* ── Fetch error banner ───────────────────────────────────────────── */}
         {fetchError && !loading && (

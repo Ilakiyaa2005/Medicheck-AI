@@ -100,4 +100,54 @@ All notable changes across development phases on branch `upgrade/v2`.
 ### How to Verify
 - Run test suite: `pytest backend/tests/ -v` (all 17 tests pass).
 
+---
+
+## [Phase 4] — Frontend Upgrade: Camera Guidance, Explainable AI, OCR/QR, Multi-Shot & Storage
+*Date: 2026-10-02*
+
+### What Changed
+1. **Zero-Database Client Architecture (`web-app/src/lib/storage.js`)**:
+   - Implemented pure client-side `localStorage` manager capped at 100 scans.
+   - Built quota fallback mechanism: strips base64 thumbnails and prunes oldest records if quota exceeded.
+   - Supports JSON export and import, with cross-tab reactive synchronization via `medicheck-storage-update`.
+2. **Real-Time Viewfinder & Camera Guidance (`web-app/src/components/CameraModule.jsx`)**:
+   - Real-time computer vision frame analysis (`web-app/src/lib/quality.js`): brightness, discrete Laplacian variance blur, specular glare fraction, inter-frame motion diff, and guide box fill ratio.
+   - Single prioritized guidance pill ("Hold steady...", "Move closer...", "Too dark...", "Ready") with severity indicators.
+   - Live circular progress ring for steady-frame detection and automatic 1.5s countdown capture.
+   - Hardware torch toggle (`torch: true` track constraint with fallback instruction).
+   - High-resolution unconstrained video track capture for sharpest OCR and tablet analysis.
+3. **Interactive Explainable AI Card (`web-app/src/components/ExplanationCard.jsx`)**:
+   - Displays top 3 plain-English diagnostic reasons explaining why a medicine was rated Genuine or Anomalous.
+   - Grouped horizontal diverging bar chart centered at $0\sigma$ reference, with visual normal range band ($-1.96\sigma$ to $+1.96\sigma$).
+   - Color-coded per-feature deviation bars (green: normal, amber: borderline, red: abnormal) with accessible numeric readouts.
+4. **Pharmaceutical Expiry & Label Parser (`web-app/src/lib/expiry.js`, `web-app/src/lib/labelParser.js`)**:
+   - End-of-month valid logic: "EXP 08/2027" remains valid until 23:59:59.999 on August 31, 2027.
+   - Leap year and month-end day computation for all 12 months.
+   - Full regex extraction for Indian blister pack formats (`B.No.`, `Batch:`, `Lot No.`, `EXP. DATE:`, `MFG.`).
+   - OCR character confusion normalization (`O` -> `0`, `I` -> `1`, `S` -> `5`, `B` -> `8`).
+   - GS1 Datamatrix / QR Application Identifier parser extracting GTIN `(01)`, Expiry `(17)`, Batch `(10)`, and Serial `(21)`.
+5. **Interactive Label Scanner Component (`web-app/src/components/LabelScanner.jsx`)**:
+   - Native `BarcodeDetector` with automatic fallback to `@zxing/browser` MultiFormatReader.
+   - Lazy-loaded Tesseract.js worker with live progress bar and status indicator.
+   - Extracted batch and expiry candidate chips for one-tap auto-filling into scan inputs.
+   - Plaintext display of QR payloads to protect users against malicious URLs.
+6. **Multi-Shot Guided Verification (`web-app/src/components/MultiShotModule.jsx`)**:
+   - Step-by-step guided capture for 2–3 photos: Shot 1 (Flash OFF), Shot 2 (Flash ON), Shot 3 (flipped/tilted).
+   - Independent photo cards with thumbnail preview, client-side quality metrics, and retake controls.
+   - Integrated call to `POST /predict-multi` displaying per-shot scores, overall verdict, and consensus indicator.
+7. **Refactored Dashboard & History (`web-app/src/Dashboard.jsx`)**:
+   - Replaced server fetch with local `storage.js` operations.
+   - Added JSON export button, "Clear History" button, and on-device privacy guarantee notice.
+8. **App Integration & Guard Decoupling (`web-app/src/App.jsx`, `web-app/src/lib/medicineGuard.js`)**:
+   - Added quick vs. multi-shot mode toggle.
+   - Decoupled `isMedicineNameAllowed` to standalone helper with whole-word regex matching.
+   - Added prominent red warning banner when scanned or entered medicine is expired.
+9. **Frontend Vitest Test Suite (`web-app/src/__tests__/`)**:
+   - Added 29 unit tests across 5 test files (`quality.test.js`, `expiry.test.js`, `labelParser.test.js`, `medicineGuard.test.js`, `storage.test.js`). All 29 tests pass.
+   - Verified clean production Vite build with chunked lazy-loading.
+
+### How to Verify
+- Run frontend tests: `cd web-app && npm.cmd test` (29/29 pass).
+- Run production build: `cd web-app && npm.cmd run build` (builds cleanly in dist/).
+
 
