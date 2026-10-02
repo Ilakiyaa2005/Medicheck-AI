@@ -109,17 +109,57 @@ FEATURE_SENTENCES = {
 }
 
 
-def compute_explanation(vec: np.ndarray, model, scaler, condition_meta: dict) -> dict:
+def find_matching_medicine_stats(medicine_name: str, all_med_stats: dict) -> tuple:
+    """
+    Fuzzy-matches user-entered medicine name against known medicine names in model metadata.
+    Returns (matched_name, stats_dict) or (None, {}).
+    """
+    if not medicine_name or not all_med_stats:
+        return None, {}
+
+    q = str(medicine_name).strip().lower()
+    # 1. Exact or substring match
+    for med_key, stats in all_med_stats.items():
+        k = med_key.lower()
+        if q == k or q in k or k in q:
+            return med_key, stats
+
+    # 2. Approximate token matching
+    import difflib
+    keys = list(all_med_stats.keys())
+    matches = difflib.get_close_matches(q, [k.lower() for k in keys], n=1, cutoff=0.45)
+    if matches:
+        for k in keys:
+            if k.lower() == matches[0]:
+                return k, all_med_stats[k]
+
+    return None, {}
+
+
+def compute_explanation(
+    vec: np.ndarray,
+    model,
+    scaler,
+    condition_meta: dict,
+    medicine_name: str = "",
+    all_medicine_stats: dict = None
+) -> dict:
     """
     Computes explainability payload for a single prediction:
     1. Feature z-scores against genuine training distribution: z = (x - mean) / std (clamped to [-4, 4]).
+       Prefers specific medicine baseline when available (e.g. Lopramide), falls back to condition baseline.
     2. Status: normal (within p5..p95), borderline (within 2*std outside), abnormal (> 2*std outside).
     3. Feature ablation impact: replace single feature with genuine median, re-score, measure score change.
     4. Top 3 ranked reasons with human-friendly descriptions.
-
-    Note: With small training sets, sample standard deviation carries statistical uncertainty.
     """
-    feat_stats = condition_meta.get("feature_stats", {})
+    matched_med, med_stats = find_matching_medicine_stats(medicine_name, all_medicine_stats)
+    if med_stats:
+        feat_stats = med_stats
+        reference_note = f"Compared against genuine '{matched_med}' reference formulation"
+    else:
+        feat_stats = condition_meta.get("feature_stats", {})
+        reference_note = "Compared against general genuine pharmaceutical baseline"
+
     x_raw = vec.astype(np.float64)
 
     # 1. Base prediction score
@@ -204,5 +244,6 @@ def compute_explanation(vec: np.ndarray, model, scaler, condition_meta: dict) ->
         "method": "zscore+ablation",
         "top_reasons": top_reasons,
         "features": features_detail,
-        "note": "Reference statistics computed from genuine tablets. Variance carries small-sample uncertainty."
+        "matched_medicine": matched_med,
+        "note": reference_note
     }

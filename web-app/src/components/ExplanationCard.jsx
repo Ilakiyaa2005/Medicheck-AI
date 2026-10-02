@@ -12,11 +12,14 @@ import React, { useState } from "react";
 export default function ExplanationCard({ explanation, isGenuine }) {
   const [activeGroup, setActiveGroup] = useState("all");
 
-  if (!explanation || !explanation.features) {
+  const features = explanation?.features || explanation?.feature_deviations || [];
+  if (!explanation || features.length === 0) {
     return null;
   }
 
-  const { top_reasons = [], features = [] } = explanation;
+  const top_reasons = explanation.top_reasons || [];
+  const note = explanation.note || "";
+  const matchedMed = explanation.matched_medicine || "";
 
   const groups = ["all", "RGB", "Ratios", "HSV", "Intensity", "Texture", "Optical"];
   const filteredFeatures =
@@ -41,11 +44,18 @@ export default function ExplanationCard({ explanation, isGenuine }) {
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <span style={{ fontSize: "1.2rem" }}>🔬</span>
           <h3 style={{ margin: 0, fontSize: "1.1rem", color: "#e8f4ff", fontWeight: 700 }}>
-            Why This Result?
+            Explainable AI Diagnostics
           </h3>
         </div>
-        <span className="expl-badge">Screening Aid</span>
+        <span className="expl-badge">XAI Screen</span>
       </div>
+
+      {/* Baseline Reference Context */}
+      {note && (
+        <div style={{ fontSize: "0.82rem", color: "#74c0fc", marginTop: "0.5rem", background: "rgba(116, 192, 252, 0.08)", padding: "0.4rem 0.75rem", borderRadius: "6px", border: "1px solid rgba(116, 192, 252, 0.2)" }}>
+          🎯 <b>Baseline:</b> {note}
+        </div>
+      )}
 
       {/* Top 3 Diagnostic Reasons */}
       <div className="expl-top-reasons" style={{ marginTop: "1rem" }}>

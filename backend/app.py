@@ -166,6 +166,7 @@ def decode_image_bytes(image_bytes: bytes) -> np.ndarray:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/", methods=["GET"])
+@app.route("/health", methods=["GET"])
 def health():
     """Health check and model capability discovery."""
     return jsonify({
@@ -178,6 +179,7 @@ def health():
             "python_version": MODEL_META.get("python_version"),
             "sklearn_version": MODEL_META.get("sklearn_version"),
             "conditions_available": list(MODEL_META.get("conditions", {}).keys()),
+            "medicines_available": list(MODEL_META.get("medicine_stats", {}).keys()),
             "feature_names": FEATURE_NAMES,
         },
         "limits": {
@@ -257,7 +259,15 @@ def predict():
                 alert = None
 
         # 5. Explainable AI payload
-        explanation = compute_explanation(feat_vec, model, scaler, cond_meta)
+        med_stats = MODEL_META.get("medicine_stats", {}) if MODEL_META else {}
+        explanation = compute_explanation(
+            feat_vec,
+            model,
+            scaler,
+            cond_meta,
+            medicine_name=medicine_name,
+            all_medicine_stats=med_stats
+        )
 
         # 6. Response JSON
         scan_id = str(uuid.uuid4())[:8].upper()
@@ -448,11 +458,14 @@ def predict_multi():
     # Average feature vector for combined explanation
     avg_feat_vec = np.mean([s["feat_vec"] for s in usable_shots], axis=0)
     primary_shot = usable_shots[0]
+    med_stats = MODEL_META.get("medicine_stats", {}) if MODEL_META else {}
     combined_explanation = compute_explanation(
         avg_feat_vec,
         primary_shot["model"],
         primary_shot["scaler"],
-        primary_shot["cond_meta"]
+        primary_shot["cond_meta"],
+        medicine_name=medicine_name,
+        all_medicine_stats=med_stats
     )
 
     clean_shots = [

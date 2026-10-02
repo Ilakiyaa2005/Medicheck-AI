@@ -363,6 +363,25 @@ def run_pipeline():
     with open(os.path.join(BASE_DIR, "scaler.pkl"), "wb") as f:
         pickle.dump(scalers["pooled"], f)
 
+    # ── Per-Medicine Specific Statistics (for targeted explainability) ────────
+    print("\nComputing per-medicine baseline distributions...")
+    medicine_stats = {}
+    for med_name, med_df in df.groupby("Medicine_Name"):
+        clean_name = str(med_name).strip()
+        med_feats = {}
+        for f_name in FEATURE_NAMES:
+            vals = med_df[f_name].values.astype(np.float64)
+            med_feats[f_name] = {
+                "mean": round(float(np.mean(vals)), 4),
+                "std": round(float(np.std(vals)) if np.std(vals) > 1e-6 else 1.0, 4),
+                "p5": round(float(np.percentile(vals, 5)), 4),
+                "p50": round(float(np.median(vals)), 4),
+                "p95": round(float(np.percentile(vals, 95)), 4),
+                "n": int(len(vals)),
+            }
+        medicine_stats[clean_name] = med_feats
+    print(f"[OK] Computed baseline statistics for {len(medicine_stats)} unique medicines.")
+
     # Global model metadata
     model_meta = {
         "model_type": "IsolationForest",
@@ -373,6 +392,7 @@ def run_pipeline():
         "feature_names": FEATURE_NAMES,
         "n_features": len(FEATURE_NAMES),
         "conditions": meta_conditions,
+        "medicine_stats": medicine_stats,
         "benchmarking": benchmark_results,
     }
 
