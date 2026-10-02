@@ -150,4 +150,29 @@ All notable changes across development phases on branch `upgrade/v2`.
 - Run frontend tests: `cd web-app && npm.cmd test` (29/29 pass).
 - Run production build: `cd web-app && npm.cmd run build` (builds cleanly in dist/).
 
+---
+
+## [Phase 5] — Polish, Documentation & Review
+*Date: 2026-10-02*
+
+### What Changed
+1. **Landing Page Refinement (`web-app/src/Landing.jsx`)**:
+   - Removed all unverified claims of database persistence, user accounts, and speculative clinical metrics.
+   - Reflected verified system performance: 93.9% (~94%) unseen batch genuine retention in Leave-One-Group-Out CV, 17 extracted optical/spectral features, and 200 isolation trees per model.
+   - Highlighted core value propositions: 100% on-device privacy (zero cloud database, zero server logs), live camera quality gates, label OCR & GS1 QR decoding, and explainable AI feature deviation diagnostics.
+   - Added honest scientific disclaimer in footer emphasizing role as a preliminary screening tool rather than a replacement for laboratory chemical assays (HPLC).
+2. **Comprehensive Project Documentation (`README.md`)**:
+   - Authored complete root documentation covering high-level architecture diagram, machine learning rationale (why unsupervised anomaly detection on genuine-only pharma dataset), model benchmarking metrics, local quick-start guide, retraining commands, API contracts, quality tuning configuration, and real-world optical limitations.
+3. **Repository Cleanliness (`.gitignore`)**:
+   - Expanded `.gitignore` with Python virtual environments, compiled bytecode, test artifacts (`.pytest_cache/`, `.coverage`), Vite build outputs (`dist/`, `web-app/dist/`), environment variable files, and OS artifacts.
+4. **Complete Verification & Validation**:
+   - Backend test suite: 17/17 pytest tests pass.
+   - Frontend test suite: 29/29 Vitest tests pass.
+   - Production Vite bundle: builds cleanly with code splitting and chunked lazy loading.
+
+### How to Verify
+- Run backend tests: `pytest backend/tests/ -v` (17 passed).
+- Run frontend tests: `cd web-app && npm.cmd test` (29 passed).
+- Run production build: `cd web-app && npm.cmd run build` (clean build).
+
 

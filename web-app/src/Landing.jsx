@@ -137,14 +137,14 @@ function PillMockup() {
       {/* Fake pill */}
       <ellipse cx="210" cy="80" rx="65" ry="28" fill="url(#pg2)" filter="url(#glow)" opacity="0.85"/>
       <ellipse cx="210" cy="74" rx="58" ry="14" fill="rgba(255,255,255,0.1)"/>
-      <text x="210" y="85" textAnchor="middle" fill="white" fontSize="11" fontWeight="700" fontFamily="monospace">FAKE ✗</text>
+      <text x="210" y="85" textAnchor="middle" fill="white" fontSize="11" fontWeight="700" fontFamily="monospace">ANOMALOUS ✗</text>
 
       {/* Scan beam */}
       <line x1="0" y1="80" x2="300" y2="80" stroke="#00c8ff" strokeWidth="0.5" strokeDasharray="4 4" opacity="0.4"/>
 
       {/* Labels */}
       <text x="90" y="125" textAnchor="middle" fill="#00ff88" fontSize="9" fontFamily="monospace">SPECTRAL MATCH</text>
-      <text x="210" y="125" textAnchor="middle" fill="#ff2d55" fontSize="9" fontFamily="monospace">ANOMALY DETECTED</text>
+      <text x="210" y="125" textAnchor="middle" fill="#ff2d55" fontSize="9" fontFamily="monospace">OPTICAL DEVIATION</text>
     </svg>
   );
 }
@@ -171,8 +171,8 @@ export default function Landing({ onEnter }) {
             <span>SPECTRAAUTH</span>
           </div>
           <div className="l-nav-links">
-            <a href="#features" className="l-link">Features</a>
-            <a href="#how" className="l-link">How It Works</a>
+            <a href="#features" className="l-link">Capabilities</a>
+            <a href="#how" className="l-link">Workflow</a>
             <a href="#tech" className="l-link">Technology</a>
           </div>
           <button className="l-cta-sm" onClick={onEnter}>Launch App →</button>
@@ -183,17 +183,17 @@ export default function Landing({ onEnter }) {
       <section className="hero">
         <div className="hero-badge">
           <span className="hero-badge-dot" />
-          AI-Powered · No Lab Equipment Required
+          Explainable AI · 100% On-Device Privacy · Zero Database
         </div>
         <h1 className="hero-h1">
           Detect Counterfeit<br />
           <span className="hero-gradient">Pharmaceuticals</span><br />
-          Instantly
+          Through Optical ML
         </h1>
         <p className="hero-sub">
-          SpectraAuth uses advanced <strong>Isolation Forest anomaly detection</strong> and
-          RGB spectral analysis from smartphone images to authenticate medicines in real-time —
-          no hardware, no laboratory, no fake data needed.
+          SpectraAuth uses calibrated <strong>Isolation Forest anomaly detection</strong>,
+          17 optical and spectral features, live camera quality gates, and packaging OCR
+          to screen medicines — with zero server-side data retention.
         </p>
         <div className="hero-actions">
           <button className="hero-btn-primary" onClick={onEnter}>
@@ -210,8 +210,8 @@ export default function Landing({ onEnter }) {
             <div className="hvf-label">SPECTRAL ANALYSIS ACTIVE</div>
             <PillMockup />
             <div className="hvf-scores">
-              <div className="hvf-score ok">Confidence: 94.2% · GENUINE</div>
-              <div className="hvf-score bad">Anomaly Score: −0.312 · FAKE</div>
+              <div className="hvf-score ok">Confidence: 94% · GENUINE</div>
+              <div className="hvf-score bad">Z-Score Deviation: +3.2σ · ANOMALOUS</div>
             </div>
           </div>
         </div>
@@ -219,23 +219,23 @@ export default function Landing({ onEnter }) {
 
       {/* ── Stats ────────────────────────────────────────────────────────── */}
       <section className="stats-section">
-        <Counter end={17}  suffix="+"  label="Spectral Features Extracted" />
-        <Counter end={95}  suffix="%"  label="Detection Accuracy (Genuine Data)" />
-        <Counter end={200} suffix=""   label="Isolation Trees in Model" />
-        <Counter end={0}   suffix=" kg" label="Hardware Required" />
+        <Counter end={17}  suffix=""    label="Optical & Spectral Features" />
+        <Counter end={94}  suffix="%"   label="Unseen Batch Retention (CV)" />
+        <Counter end={200} suffix=""    label="Isolation Trees per Model" />
+        <Counter end={0}   suffix=" B"  label="Server Data Stored (Zero Logs)" />
       </section>
 
       {/* ── Features ─────────────────────────────────────────────────────── */}
       <section className="section" id="features">
         <div className="section-label">◈ CAPABILITIES</div>
-        <h2 className="section-h2">Everything You Need to <span className="hl">Authenticate</span> Medicines</h2>
+        <h2 className="section-h2">Everything You Need to <span className="hl">Screen</span> Medicines</h2>
         <div className="feat-grid">
-          <FeatureCard icon="🔬" delay="0s"    title="Spectral RGB Analysis"     desc="Extracts 17 optical features including RGB means, ratios, HSV values, texture and surface gloss from any smartphone image." />
-          <FeatureCard icon="🧠" delay="0.1s"  title="Isolation Forest AI"       desc="Trained exclusively on genuine tablet data. Deviations from the learned pattern are automatically flagged as counterfeit." />
-          <FeatureCard icon="⚡" delay="0.2s"  title="Real-Time Detection"        desc="Upload an image and receive a result with confidence score and anomaly metrics in under 2 seconds." />
-          <FeatureCard icon="📱" delay="0.3s"  title="Mobile Ready"              desc="Full React Native app with camera capture, gallery picker, and haptic feedback — works on iOS and Android." />
-          <FeatureCard icon="📊" delay="0.4s"  title="Analytics Dashboard"       desc="Track detection history, monitor genuine vs. fake ratios, view feature distributions across all scans." />
-          <FeatureCard icon="🌐" delay="0.5s"  title="Cloud-Based Processing"      desc="Deployed on a secure cloud server. Tablet images are analysed remotely, enabling access from any device, anywhere." />
+          <FeatureCard icon="🔬" delay="0s"    title="17-Feature Optical Analysis" desc="Extracts RGB means, colour ratios, normalized HSV values, GLCM texture (Contrast, Homogeneity), surface glossiness, and specular reflection." />
+          <FeatureCard icon="🧠" delay="0.1s"  title="Isolation Forest Anomaly Detection" desc="Trained strictly on verified genuine tablets across 12 production batches. Anomalous chemical coatings or color deviations are reliably isolated." />
+          <FeatureCard icon="📊" delay="0.2s"  title="Explainable AI Diagnostics" desc="Interactive z-score bar chart and plain-English diagnostic explanations showing exactly which features contributed to the verdict." />
+          <FeatureCard icon="📷" delay="0.3s"  title="Live Camera Quality Gate" desc="Real-time browser CV monitors brightness, focus blur, specular glare, motion, and framing before capture to prevent poor-quality scans." />
+          <FeatureCard icon="📦" delay="0.4s"  title="Label OCR & Expiry Check" desc="Extracts Indian blister pack batch numbers, parses GS1 Datamatrix 2D codes, and enforces strict pharmaceutical end-of-month expiry rules." />
+          <FeatureCard icon="🔒" delay="0.5s"  title="100% On-Device Privacy" desc="Zero logins, zero accounts, and zero cloud database. All scan history, thumbnails, and notes reside strictly inside your browser's localStorage." />
         </div>
       </section>
 
@@ -244,33 +244,33 @@ export default function Landing({ onEnter }) {
         <div className="section-label">◈ WORKFLOW</div>
         <h2 className="section-h2">How <span className="hl">SpectraAuth</span> Works</h2>
         <div className="steps-wrap">
-          <Step num="01" color="#00c8ff" title="Capture Tablet Image"
-            desc="Use your smartphone camera or upload any existing photo. SpectraAuth works with standard JPEG, PNG, or WEBP images." />
-          <Step num="02" color="#00ff88" title="OpenCV Preprocessing"
-            desc="Image is resized to 224×224, denoised with Gaussian blur, and lighting is normalised using CLAHE — ensuring consistent feature extraction." />
-          <Step num="03" color="#a78bfa" title="17-Feature Extraction"
-            desc="RGB means, HSV values, colour ratios, GLCM texture (Contrast, Homogeneity), intensity statistics, Glossiness and Specular Ratio are extracted." />
-          <Step num="04" color="#fb923c" title="Isolation Forest Scoring"
-            desc="The feature vector is scaled and passed to the Isolation Forest model. Samples deviating from genuine patterns receive a negative decision score." />
-          <Step num="05" color="#00ff88" title="Result & Confidence"
-            desc="Receive Genuine (+1) or Fake (−1) with a confidence percentage, anomaly score, and extracted feature breakdown — all in under 2 seconds." />
+          <Step num="01" color="#00c8ff" title="Guided Live Capture"
+            desc="Use your smartphone or webcam with the live viewfinder. Visual indicators ensure lighting, blur, and tablet distance meet quality standards before capture." />
+          <Step num="02" color="#00ff88" title="Server Quality & CLAHE Normalization"
+            desc="The image is validated on the backend for blur and glare, then resized to 224×224 with CLAHE contrast enhancement for illumination invariance." />
+          <Step num="03" color="#a78bfa" title="17-Feature Spectral Extraction"
+            desc="Extracts color means, HSV coordinates, channel ratios, GLCM texture metrics, intensity statistics, surface glossiness, and specular reflection." />
+          <Step num="04" color="#fb923c" title="Condition Model Routing"
+            desc="Requests are dynamically routed to condition-specific models (Flash ON vs Flash OFF) with calibrated decision thresholds to eliminate lighting bias." />
+          <Step num="05" color="#00ff88" title="Calibrated Verdict & Explanation"
+            desc="Get a calibrated confidence score, plain-English reasons for the verdict, and a diverging z-score chart highlighting feature anomalies." />
         </div>
       </section>
 
       {/* ── Tech stack ───────────────────────────────────────────────────── */}
       <section className="section tech-section" id="tech">
         <div className="section-label">◈ TECHNOLOGY STACK</div>
-        <h2 className="section-h2">Built With <span className="hl">Proven Tools</span></h2>
+        <h2 className="section-h2">Built With <span className="hl">Scientific Tools</span></h2>
         <div className="tech-grid">
           {[
-            { name: "Python 3.11",         role: "Core Language",       color: "#ffd43b" },
-            { name: "Isolation Forest",     role: "Anomaly Detection",   color: "#00ff88" },
-            { name: "OpenCV",              role: "Image Processing",     color: "#00c8ff" },
-            { name: "Scikit-learn",        role: "Machine Learning",     color: "#f97316" },
-            { name: "scikit-image",        role: "GLCM Texture",         color: "#a78bfa" },
-            { name: "Flask + CORS",        role: "REST API",             color: "#00c8ff" },
-            { name: "React 18",            role: "Web Frontend",         color: "#61dafb" },
-            { name: "React Native / Expo", role: "Mobile App",           color: "#ffffff" },
+            { name: "Python 3.10+",        role: "Backend Runtime",     color: "#ffd43b" },
+            { name: "Isolation Forest",    role: "Anomaly Detection",   color: "#00ff88" },
+            { name: "OpenCV",              role: "Computer Vision",     color: "#00c8ff" },
+            { name: "Scikit-learn",        role: "ML & Preprocessing",   color: "#f97316" },
+            { name: "scikit-image",        role: "GLCM Texture Analysis",color: "#a78bfa" },
+            { name: "Flask (Stateless)",   role: "Zero-DB REST API",    color: "#00c8ff" },
+            { name: "React 18 + Vite",     role: "Modern Frontend",     color: "#61dafb" },
+            { name: "Tesseract.js & ZXing",role: "OCR & GS1 QR Barcodes",color: "#ffffff" },
           ].map(t => (
             <div key={t.name} className="tech-chip">
               <div className="tech-dot" style={{ background: t.color }} />
@@ -287,8 +287,8 @@ export default function Landing({ onEnter }) {
       <section className="cta-section">
         <div className="cta-glow" />
         <div className="cta-label">◈ READY TO BEGIN</div>
-        <h2 className="cta-h2">Authenticate Your First Tablet in 30 Seconds</h2>
-        <p className="cta-sub">No setup needed. Upload an image, get a result.</p>
+        <h2 className="cta-h2">Screen Your Tablet in 15 Seconds</h2>
+        <p className="cta-sub">No account needed. Instant on-device screening with full privacy.</p>
         <button className="hero-btn-primary cta-btn" onClick={onEnter}>
           <span className="hero-btn-icon">🔬</span>
           Open SpectraAuth Scanner
@@ -297,9 +297,11 @@ export default function Landing({ onEnter }) {
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer className="l-footer">
-        <div className="l-footer-logo">⬡ SPECTRAAUTH</div>
-        <p>Hardware-Free Computational Spectral Authentication System for Pharmaceuticals</p>
-        <p>Final Year Project · Isolation Forest · Anomaly Detection</p>
+        <div className="l-footer-logo">⬡ SPECTRAAUTH · MEDICHECK-AI</div>
+        <p>Computational Optical Screening System for Pharmaceutical Authentication</p>
+        <p style={{ marginTop: "6px", fontSize: "0.8rem", color: "var(--text-muted, #64748b)" }}>
+          ⚠️ Research & screening tool. Not a substitute for laboratory HPLC spectrometry or clinical regulatory assay.
+        </p>
       </footer>
     </div>
   );
