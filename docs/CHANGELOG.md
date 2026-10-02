@@ -34,3 +34,39 @@ All notable changes across development phases on branch `upgrade/v2`.
 - Run parity test: `pytest backend/tests/test_feature_parity.py -v` (passes 100%).
 - Run training CLI: `python backend/training.py --csv backend/updated_pharma_dataset.csv` (runs without error).
 - Test medicine names: verified Carvedilol, Carbamazepine, Calcium carbonate, and Levocarnitine pass validation.
+
+---
+
+## [Phase 2] — Dataset Audit, Retraining & Model Artifacts
+*Date: 2026-10-02*
+
+### What Changed
+1. **Dataset Audit (`backend/reports/data_audit.md`)**:
+   - Audited `updated_pharma_dataset.csv` (215 rows, 27 columns).
+   - Confirmed genuine-only samples across 22 medicines and 12 batches, with zero fake samples (unsupervised anomaly detection required).
+   - Confirmed Option B (no raw images in repository).
+   - Verified Flash condition split: 104 Flash OFF, 108 Flash ON (both $\ge 60$ threshold, enabling per-condition models).
+2. **Model Benchmarking (`backend/training.py`)**:
+   - Benchmarked 4 anomaly detector candidates using Leave-One-Group-Out CV grouped by batch/medicine and synthetic multi-feature counterfeit perturbation stress tests.
+   - Selected Isolation Forest as core detector: 93.9% genuine acceptance on unseen batches, robust outlier rejection, combined with feature ablation impact for explainability.
+3. **Condition-Specific Models**:
+   - Trained `flash_off` model & scaler (`backend/model/model_flash_off.pkl`, `scaler_flash_off.pkl`).
+   - Trained `flash_on` model & scaler (`backend/model/model_flash_on.pkl`, `scaler_flash_on.pkl`).
+   - Trained `pooled` fallback model & scaler (`backend/model/model_pooled.pkl`, `scaler_pooled.pkl`).
+4. **Artifacts & Comprehensive Metadata (`backend/model/model_meta.json`)**:
+   - Stored runtime versions (Python 3.10.11, scikit-learn 1.5.0, numpy 1.26.4).
+   - Stored calibrated decision thresholds ($p5$) and score percentiles ($p1$ to $p99$) for confidence mapping.
+   - Stored per-feature genuine distribution statistics (mean, std, $p5$, $p50$, $p95$) for explanation feature.
+5. **Score Distribution Plots & Training Report**:
+   - Generated score distribution histograms with threshold overlays: `backend/reports/score_distribution_*.png`.
+   - Generated `backend/reports/training_report.md` detailing cross-validation results, perturbation tests, and small-data caveats.
+6. **Requirements Update**:
+   - Updated `backend/requirements.txt` with pinned versions and removed `pymongo`.
+   - Created `backend/requirements-train.txt` with `matplotlib` and `pytest`.
+
+### How to Verify
+- Check reports: `backend/reports/data_audit.md` and `backend/reports/training_report.md`.
+- Inspect artifacts: `backend/model/model_*.pkl`, `scaler_*.pkl`, and `backend/model/model_meta.json`.
+- Run parity test: `pytest backend/tests/test_feature_parity.py -v` (passes 100%).
+- Run training pipeline: `python backend/training.py --csv backend/updated_pharma_dataset.csv`.
+
