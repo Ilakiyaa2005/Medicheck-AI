@@ -70,3 +70,34 @@ All notable changes across development phases on branch `upgrade/v2`.
 - Run parity test: `pytest backend/tests/test_feature_parity.py -v` (passes 100%).
 - Run training pipeline: `python backend/training.py --csv backend/updated_pharma_dataset.csv`.
 
+---
+
+## [Phase 3] — Backend API Refactoring & Multi-Shot Support
+*Date: 2026-10-02*
+
+### What Changed
+1. **Server Architecture Modernization & MongoDB Removal**:
+   - Completely removed `pymongo`, database connection logic, and server-side scan history endpoints (`GET /history`, `DELETE /history/<id>`).
+   - The server is strictly stateless and retains zero user scan images or records (privacy by design).
+2. **Server-Side Quality Gate (`backend/quality.py`)**:
+   - Added automated pre-inference quality checks for brightness (luminance $\in [60, 215]$), focus blur (normalized Laplacian variance), glare fraction ($> 4\%$ saturated pixels), and frame fill.
+   - Images with severe quality degradation trigger a graceful `Inconclusive` response instructing the user to retake.
+3. **Upgraded `POST /predict` API**:
+   - Input validation: max file size (8 MB limit), MIME content-type checks, empty file guards.
+   - Dynamic model routing by `shot_type`: directs request to `flash_on`, `flash_off`, or `pooled` models.
+   - Replaced arbitrary sigmoid confidence with continuous calibration based on empirical training score percentiles ($p5, p50, p95$).
+   - Returns full v2 response contract with `explanation`, `quality`, and `model` blocks.
+4. **Multi-Shot Authentication `POST /predict-multi`**:
+   - Accepts 2–3 photos (`flash_off`, `flash_on`, flipped angles) with accompanying `shots_meta`.
+   - Scores each image against its corresponding illumination model.
+   - Combines calibrated probabilities via median (3+ shots) or mean (2 shots), with agreement metric and disagreement safeguards.
+5. **Explainable AI Engine (`backend/explanation.py`)**:
+   - Computes per-feature $z$-scores ($\text{clamp} \pm 4.0$), status classification (`normal`, `borderline`, `abnormal`), and single-feature ablation impact.
+   - Maps anomalous spectral deviations to plain-English descriptive diagnostic sentences.
+6. **Backend Test Suite (`backend/tests/`)**:
+   - Added 17 unit and integration tests covering parity, quality gate, explanation generator, `/predict`, and `/predict-multi`.
+
+### How to Verify
+- Run test suite: `pytest backend/tests/ -v` (all 17 tests pass).
+
+
