@@ -16,7 +16,9 @@
   OUT:  model.pkl, scaler.pkl
 """
 
-import os, warnings
+import os, sys, warnings
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 import numpy as np
 import pandas as pd
 import pickle
@@ -31,58 +33,62 @@ warnings.filterwarnings("ignore")
 
 from features import FEATURE_NAMES    # canonical column order
 
+import argparse
+
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-CSV_PATH        = "dataset.csv"   # ← change to your CSV filename
-MODEL_OUT       = "model.pkl"
-SCALER_OUT      = "scaler.pkl"
+parser = argparse.ArgumentParser(description="Train Isolation Forest anomaly detector on genuine tablet spectral features.")
+parser.add_argument("--csv", type=str, default="updated_pharma_dataset.csv", help="Path to input dataset CSV")
+parser.add_argument("--images-dir", type=str, default=None, help="Optional path to directory of raw images")
+args = parser.parse_args()
+
+CSV_PATH   = args.csv
+MODEL_OUT  = "model.pkl"
+SCALER_OUT = "scaler.pkl"
 
 # Isolation Forest hyper-parameters
-CONTAMINATION   = 0.05   # expected fraction of outliers in training data
-                          # (set to 0.0 if your CSV is truly 100% genuine)
-N_ESTIMATORS    = 200
-RANDOM_STATE    = 42
+CONTAMINATION = 0.05   # initial baseline
+N_ESTIMATORS  = 200
+RANDOM_STATE  = 42
 
 # ── STEP 1 — LOAD ─────────────────────────────────────────────────────────────
 print("=" * 60)
-print("  STEP 1: Loading Dataset")
+print(f"  STEP 1: Loading Dataset from '{CSV_PATH}'")
 print("=" * 60)
 
 if not os.path.exists(CSV_PATH):
-    print(f"  [INFO] '{CSV_PATH}' not found → generating synthetic genuine data.")
-    np.random.seed(RANDOM_STATE)
-    n = 400
-    data = {
-        "Mean_R":       np.random.normal(205, 8,  n),
-        "Mean_G":       np.random.normal(178, 8,  n),
-        "Mean_B":       np.random.normal(142, 8,  n),
-        "R_G_Ratio":    np.random.normal(1.15, 0.05, n),
-        "G_B_Ratio":    np.random.normal(1.25, 0.05, n),
-        "R_B_Ratio":    np.random.normal(1.44, 0.06, n),
-        "Mean_H":       np.random.normal(22,  4,  n),
-        "Mean_S":       np.random.normal(55,  6,  n),
-        "Mean_V":       np.random.normal(200, 8,  n),
-        "Contrast":     np.random.normal(120, 20, n),
-        "Homogeneity":  np.random.normal(0.45, 0.05, n),
-        "Mean_Intensity": np.random.normal(188, 8, n),
-        "Max_Intensity":  np.random.normal(240, 5, n),
-        "Min_Intensity":  np.random.normal(110, 8, n),
-        "Std_Intensity":  np.random.normal(30,  4, n),
-        "Glossiness":     np.random.normal(15,  3, n),
-        "Specular_Ratio": np.random.normal(0.08, 0.02, n),
-    }
-    df = pd.DataFrame(data)
-    df = pd.read_csv("pharma_dataset.csv", encoding='utf-8', engine='python', on_bad_lines='skip')
-    print(f"  [OK] Loaded '{CSV_PATH}' — {len(df)} rows, {len(df.columns)} columns")
-else:
-    df = pd.read_csv("pharma_dataset.csv", encoding='utf-8', engine='python', on_bad_lines='skip')
-    print(f"  [OK] Loaded '{CSV_PATH}' — {len(df)} rows, {len(df.columns)} columns")
+    # Try looking relative to script directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    alt_path = os.path.join(script_dir, CSV_PATH)
+    if os.path.exists(alt_path):
+        CSV_PATH = alt_path
+    else:
+        raise FileNotFoundError(f"Dataset CSV not found at '{CSV_PATH}'. Please verify the path.")
+
+df = pd.read_csv(CSV_PATH, encoding="utf-8-sig", engine="python", on_bad_lines="skip")
+print(f"  [OK] Loaded '{CSV_PATH}' — {len(df)} rows, {len(df.columns)} columns")
+
+# Clean dirty string values in categorical columns
+for col in ["Medicine_Name", "Batch_Number", "Brand", "Phone_Model", "Light_Type", "Flash", "Angle"]:
+    if col in df.columns:
+        df[col] = df[col].astype(str).str.strip()
+
+if "Flash" in df.columns:
+    df["Flash"] = df["Flash"].str.upper()
+if "Angle" in df.columns:
+    df["Angle"] = df["Angle"].str.upper()
 
 # ── STEP 2 — PREPROCESS ───────────────────────────────────────────────────────
 print("\n" + "=" * 60)
 print("  STEP 2: Preprocessing")
 print("=" * 60)
 
-# Select only the features present in both CSV and FEATURE_NAMES
+# Check for duplicate feature rows
+dup_count = df.duplicated(subset=FEATURE_NAMES).sum()
+if dup_count > 0:
+    print(f"  [WARN] Found {dup_count} duplicate feature rows. Dropping duplicates.")
+    df = df.drop_duplicates(subset=FEATURE_NAMES).reset_index(drop=True)
+    print(f"  [OK] Retained {len(df)} unique rows.")
+
 available = [f for f in FEATURE_NAMES if f in df.columns]
 missing   = [f for f in FEATURE_NAMES if f not in df.columns]
 if missing:
@@ -95,8 +101,11 @@ X = df[FEATURE_NAMES].copy()
 
 # Fill NaN with column median
 nan_count = X.isnull().sum().sum()
-X.fillna(X.median(numeric_only=True), inplace=True)
-print(f"  [OK] Filled {nan_count} NaN values with column medians.")
+if nan_count > 0:
+    X.fillna(X.median(numeric_only=True), inplace=True)
+    print(f"  [OK] Filled {nan_count} NaN values with column medians.")
+else:
+    print("  [OK] No NaN values found in feature columns.")
 print(f"  [OK] Feature matrix shape: {X.shape}")
 
 # ── STEP 3 — SCALE ────────────────────────────────────────────────────────────
@@ -163,7 +172,7 @@ try:
 except Exception as e:
     print(f"  [INFO] Could not save plot: {e}")
 
-print("\n  ✅  Training complete!")
+print("\n  [OK] Training complete!")
 print("      Run:  python app.py   to start the API")
 print("=" * 60)
 
@@ -181,10 +190,11 @@ def demo_predict(x_raw, label="?"):
     result = "Genuine" if pred == 1 else "Fake"
     print(f"    [{label}]  pred={pred}  score={score:.3f}  confidence={conf:.2%}  → {result}")
 
-demo_predict(X_scaled[0],  "Train sample 0  (expect Genuine)")
-demo_predict(X_scaled[-1], "Train sample -1 (expect Genuine)")
+demo_predict(X.iloc[0].values,  "Train sample 0  (expect Genuine)")
+demo_predict(X.iloc[-1].values, "Train sample -1 (expect Genuine)")
 
-# Simulate a fake by perturbing a genuine sample heavily
-fake_raw = X_scaled[0].copy()
-fake_raw += np.random.normal(loc=5, scale=2, size=fake_raw.shape)
+# Simulate a fake by heavily perturbing a genuine sample in raw feature space
+fake_raw = X.iloc[0].values.copy()
+fake_raw[0] = fake_raw[0] * 0.1   # alter color drastically
+fake_raw[6] = (fake_raw[6] + 90.0) % 180.0  # alter hue
 demo_predict(fake_raw, "Perturbed sample (expect Fake)")

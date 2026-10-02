@@ -3,7 +3,7 @@
 //  Handles: base URL, wake-up ping, fetch with timeout + auto-retry
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const API = "https://medicheck-ai-njtm.onrender.com";
+export const API = import.meta.env.VITE_API_URL || "https://medicheck-ai-njtm.onrender.com";
 
 /**
  * fetchWithTimeout

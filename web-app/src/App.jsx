@@ -271,23 +271,22 @@ const CameraModule = ({ onCapture, loading }) => {
 async function validateMedicineImage(file, medicineName) {
   return new Promise((resolve) => {
 
-    // ── 1. Medicine name keyword guard ───────────────────────────────────────
-    const BAD_KEYWORDS = [
+    // ── 1. Medicine name keyword guard (whole-word matching only) ─────────────
+    const BAD_KEYWORDS = new Set([
       "food","fruit","vegetable","animal","cat","dog","bird","flower",
       "tree","car","phone","laptop","person","face","selfie","nature",
       "sky","beach","mountain","river","sea","chicken","rice","curry",
       "coffee","tea","juice","cake","pizza","burger","fish","egg",
       "plant","grass","leaf","water","drink","snack","biscuit","bread",
-    ];
-    const nameLower = medicineName.toLowerCase();
-    for (const kw of BAD_KEYWORDS) {
-      if (nameLower.includes(kw)) {
-        resolve({
-          valid: false,
-          reason: `❌ "${medicineName}" doesn't look like a medicine name. Please enter the correct tablet or capsule name.`,
-        });
-        return;
-      }
+    ]);
+    const words = medicineName.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    const matchedBad = words.find(w => BAD_KEYWORDS.has(w));
+    if (matchedBad) {
+      resolve({
+        valid: false,
+        reason: `❌ "${medicineName}" doesn't look like a medicine name (matched non-medicine term: "${matchedBad}"). Please enter the correct tablet or capsule name.`,
+      });
+      return;
     }
 
     // ── 2. Pixel-level analysis ──────────────────────────────────────────────

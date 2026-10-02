@@ -76,8 +76,8 @@ def extract_features(img_bgr: np.ndarray) -> np.ndarray:
     hsv      = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
     crop_hsv = hsv[mh:h-mh, mw:w-mw]
     Mean_H = float(np.mean(crop_hsv[:, :, 0]))
-    Mean_S = float(np.mean(crop_hsv[:, :, 1]))
-    Mean_V = float(np.mean(crop_hsv[:, :, 2]))
+    Mean_S = float(np.mean(crop_hsv[:, :, 1])) / 255.0
+    Mean_V = float(np.mean(crop_hsv[:, :, 2])) / 255.0
 
     # ── Intensity (grayscale) ─────────────────────────────────────────────────
     gray      = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)

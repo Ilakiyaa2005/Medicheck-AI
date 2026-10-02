@@ -26,7 +26,8 @@ from features import (
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
-CORS(app, origins="*")
+cors_origins = os.environ.get("CORS_ORIGINS", "*")
+CORS(app, origins=cors_origins if cors_origins == "*" else [o.strip() for o in cors_origins.split(",")])
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
@@ -211,4 +212,6 @@ def delete_one(scan_id):
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    debug_mode = os.environ.get("FLASK_DEBUG", "0").lower() in ("1", "true", "yes")
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)
