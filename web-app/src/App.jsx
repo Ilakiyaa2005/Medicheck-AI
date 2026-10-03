@@ -481,14 +481,6 @@ export default function App() {
               <Icon name="scan" />
               <span>Spectral Tablet Scan</span>
             </div>
-            <button
-              type="button"
-              className="scanner-trigger-btn"
-              onClick={() => setShowLabelScanner(v => !v)}
-              title="Scan packaging label or barcode"
-            >
-              🏷️ {showLabelScanner ? "Hide Scanner" : "Scan Label / QR"}
-            </button>
           </div>
 
           {/* Mode Switcher */}
@@ -786,7 +778,11 @@ export default function App() {
 
               {/* Explainable AI Diagnostics Card (Feature F2) */}
               {result.explanation && (
-                <ExplanationCard explanation={result.explanation} isGenuine={isGenuine} />
+                <ExplanationCard
+                  explanation={result.explanation}
+                  isGenuine={isGenuine}
+                  medicineName={medicine || result.medicine_name}
+                />
               )}
             </div>
           )}

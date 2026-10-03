@@ -30,7 +30,7 @@ from features import (
     feature_dict,
     FEATURE_NAMES,
 )
-from quality import assess_image_quality
+from quality import assess_image_quality, detect_human_face
 from explanation import compute_explanation
 
 # ── App setup ─────────────────────────────────────────────────────────────────
@@ -228,6 +228,12 @@ def predict():
         # Decode image
         img_bgr = decode_image_bytes(image_bytes)
 
+        # Immediate rejection if a person's face is detected
+        if detect_human_face(img_bgr):
+            return jsonify({
+                "error": "❌ A person's face was detected. Please upload or photograph a medicine tablet or capsule, not a person."
+            }), 422
+
         # 1. Server-side Quality Gate
         quality = assess_image_quality(img_bgr)
 
@@ -352,6 +358,11 @@ def predict_multi():
             if len(image_bytes) == 0:
                 continue
             img_bgr = decode_image_bytes(image_bytes)
+
+            if detect_human_face(img_bgr):
+                return jsonify({
+                    "error": f"❌ A person's face was detected in photo #{idx+1}. Please photograph only the medicine tablet or capsule."
+                }), 422
 
             # Quality check
             quality = assess_image_quality(img_bgr)

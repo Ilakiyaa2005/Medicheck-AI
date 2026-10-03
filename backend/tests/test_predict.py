@@ -99,3 +99,18 @@ def test_predict_severely_dark_returns_inconclusive(client):
     json_data = res.get_json()
     assert json_data["result"] == "Inconclusive"
     assert json_data["label_code"] == 0
+
+
+def test_predict_face_rejected(client, monkeypatch):
+    # When a human face is detected, API must reject with 422
+    monkeypatch.setattr("app.detect_human_face", lambda img: True)
+    img_bytes = make_test_image_bytes()
+    data = {
+        "image": (io.BytesIO(img_bytes), "selfie.jpg", "image/jpeg"),
+        "medicine_name": "Loperamide"
+    }
+    res = client.post("/predict", data=data, content_type="multipart/form-data")
+    assert res.status_code == 422
+    body = res.get_json()
+    assert "face" in body["error"].lower()
+

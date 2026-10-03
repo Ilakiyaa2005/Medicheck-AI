@@ -11,7 +11,7 @@ backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-from quality import assess_image_quality, compute_brightness, compute_blur, compute_glare_fraction
+from quality import assess_image_quality, compute_brightness, compute_blur, compute_glare_fraction, detect_human_face
 
 
 def test_quality_good_tablet_image():
@@ -53,3 +53,11 @@ def test_quality_severely_blurry():
     q = assess_image_quality(flat_img)
     assert not q["ok"]
     assert q["blur_score"] < 10.0
+
+
+def test_detect_human_face_on_tablet():
+    # Tablet image should NOT trigger face detector
+    img = np.full((300, 300, 3), 180, dtype=np.uint8)
+    cv2.circle(img, (150, 150), 80, (230, 230, 225), -1)
+    assert not detect_human_face(img)
+

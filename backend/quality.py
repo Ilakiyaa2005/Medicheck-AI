@@ -66,6 +66,34 @@ def compute_fill_ratio(img_bgr: np.ndarray) -> float:
     return float(np.mean(fg_mask))
 
 
+def detect_human_face(img_bgr: np.ndarray) -> bool:
+    """
+    Detects if a human face is present in the image using OpenCV Haar cascade.
+    Returns True if a face is detected.
+    """
+    if img_bgr is None or img_bgr.size == 0:
+        return False
+    try:
+        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        if not face_cascade.empty():
+            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+            h, w = gray.shape[:2]
+            if max(h, w) > 800:
+                scale = 800.0 / max(h, w)
+                gray = cv2.resize(gray, (int(w * scale), int(h * scale)))
+            faces = face_cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=4,
+                minSize=(35, 35)
+            )
+            return len(faces) > 0
+    except Exception as e:
+        print("[WARN] Face detection error:", e)
+    return False
+
+
 def assess_image_quality(img_bgr: np.ndarray) -> dict:
     """
     Runs full quality pipeline on an image.
@@ -105,6 +133,11 @@ def assess_image_quality(img_bgr: np.ndarray) -> dict:
 
     issues = []
     severe_issues = []
+
+    # Human face check
+    if detect_human_face(img_bgr):
+        issues.append("Human face detected — please photograph a medicine tablet or capsule, not a person.")
+        severe_issues.append("Human face detected")
 
     # Brightness checks
     if brightness < QUALITY_CONFIG["brightness_min"]:
