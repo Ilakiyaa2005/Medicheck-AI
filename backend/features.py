@@ -50,12 +50,76 @@ def _ratio(a: float, b: float) -> float:
     return float(a) / (float(b) + 1e-6)
 
 
+def isolate_tablet_roi(img_bgr: np.ndarray) -> np.ndarray:
+    """
+    Attempts to locate and crop the foreground tablet from its background.
+    If the image already tightly frames the tablet or background segmentation fails,
+    returns the original image.
+    """
+    if img_bgr is None or img_bgr.size == 0:
+        return img_bgr
+
+    h, w = img_bgr.shape[:2]
+    if h < 20 or w < 20:
+        return img_bgr
+
+    # Estimate background from borders (outer 12% perimeter)
+    border_mask = np.ones((h, w), dtype=bool)
+    border_mask[int(h * 0.12):int(h * 0.88), int(w * 0.12):int(w * 0.88)] = False
+    border_pixels = img_bgr[border_mask]
+    if len(border_pixels) == 0:
+        return img_bgr
+
+    bg_bgr = np.median(border_pixels, axis=0)
+    diff = np.linalg.norm(img_bgr.astype(np.float32) - bg_bgr, axis=2)
+    fg_thresh = max(24.0, float(np.mean(diff) + 0.4 * np.std(diff)))
+    fg_mask = (diff > fg_thresh).astype(np.uint8) * 255
+
+    kernel_size = max(3, int(min(h, w) * 0.02))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+    fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel)
+    fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel)
+
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return img_bgr
+
+    min_area = (h * w) * 0.005
+    max_area = (h * w) * 0.95
+    valid_candidates = []
+
+    for c in contours:
+        area = cv2.contourArea(c)
+        if min_area <= area <= max_area:
+            x, y, cw, ch = cv2.boundingRect(c)
+            cx, cy = x + cw / 2.0, y + ch / 2.0
+            if 0.08 * w < cx < 0.92 * w and 0.08 * h < cy < 0.92 * h:
+                valid_candidates.append((area, (x, y, cw, ch)))
+
+    if not valid_candidates:
+        return img_bgr
+
+    valid_candidates.sort(key=lambda item: item[0], reverse=True)
+    best_area, (bx, by, bw, bh) = valid_candidates[0]
+
+    pad = int(min(bw, bh) * 0.05)
+    x1 = max(0, bx - pad)
+    y1 = max(0, by - pad)
+    x2 = min(w, bx + bw + pad)
+    y2 = min(h, by + bh + pad)
+
+    cropped = img_bgr[y1:y2, x1:x2]
+    return cropped if cropped.size > 0 else img_bgr
+
+
 def extract_features(img_bgr: np.ndarray) -> np.ndarray:
     """
     BGR image  →  1-D float64 array of shape (17,).
     Feature order matches FEATURE_NAMES.
     """
-    img = preprocess_image(img_bgr)
+    # 1. First isolate foreground tablet if distinct from background
+    tablet_img = isolate_tablet_roi(img_bgr)
+    img = preprocess_image(tablet_img)
 
     h, w = img.shape[:2]
     mh, mw = int(h * 0.10), int(w * 0.10)   # 10% margin = 80% centre crop
@@ -76,8 +140,8 @@ def extract_features(img_bgr: np.ndarray) -> np.ndarray:
     hsv      = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
     crop_hsv = hsv[mh:h-mh, mw:w-mw]
     Mean_H = float(np.mean(crop_hsv[:, :, 0]))
-    Mean_S = float(np.mean(crop_hsv[:, :, 1]))
-    Mean_V = float(np.mean(crop_hsv[:, :, 2]))
+    Mean_S = float(np.mean(crop_hsv[:, :, 1])) / 255.0
+    Mean_V = float(np.mean(crop_hsv[:, :, 2])) / 255.0
 
     # ── Intensity (grayscale) ─────────────────────────────────────────────────
     gray      = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)

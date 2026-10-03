@@ -567,3 +567,350 @@ body {
   margin-left: 7px;
   display: inline;
 }
+
+/* ── Mode selector ───────────────────────────────────────────────────────── */
+.scan-mode-selector {
+  display: flex;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--rad);
+  padding: 4px;
+  margin-bottom: 1.25rem;
+  gap: 4px;
+}
+.scan-mode-btn {
+  flex: 1;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--head);
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: var(--rads);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.scan-mode-btn.active {
+  background: var(--s1);
+  color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0,119,182,0.12);
+}
+
+/* ── Expired warning banner ──────────────────────────────────────────────── */
+.expired-alert-banner {
+  background: #fff0f3;
+  border: 1px solid #ffccd5;
+  border-left: 4px solid var(--bad);
+  border-radius: var(--rads);
+  padding: 10px 14px;
+  margin: 1rem 0;
+  color: #a81c37;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Batch mismatch warning ─────────────────────────────────────────────── */
+.batch-mismatch-note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #d97706;
+}
+
+/* ── Camera Modal & Guidance ─────────────────────────────────────────────── */
+.camera-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 30, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.camera-modal-container {
+  width: 100%;
+  max-width: 540px;
+  background: #0d1424;
+  border: 1px solid rgba(0, 255, 136, 0.25);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+.camera-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.cam-ctrl-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #e8f4ff;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.cam-ctrl-btn:hover { background: rgba(255,255,255,0.15); }
+.cam-ctrl-btn.active { background: #00ff88; color: #080c14; font-weight: 700; }
+.cam-ctrl-btn.close-btn { color: #ff6b6b; font-size: 14px; }
+
+.camera-viewfinder-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.camera-video-stream {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.camera-guide-box {
+  position: absolute;
+  width: 65%;
+  height: 65%;
+  border: 2px dashed #ffd43b;
+  border-radius: 14px;
+  pointer-events: none;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+.cam-corner {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-width: 3px;
+  border-style: solid;
+}
+.cam-corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; border-top-left-radius: 12px; }
+.cam-corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; border-top-right-radius: 12px; }
+.cam-corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; border-bottom-left-radius: 12px; }
+.cam-corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; border-bottom-right-radius: 12px; }
+
+.camera-progress-fill {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 2px;
+  transition: height 0.15s ease;
+}
+
+.camera-guidance-pill {
+  position: absolute;
+  bottom: 14px;
+  background: rgba(13, 20, 36, 0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid #ffd43b;
+  border-radius: 20px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 90%;
+}
+.pill-dot { width: 8px; height: 8px; border-radius: 50%; }
+.pill-text { font-size: 12px; color: #fff; font-weight: 500; }
+
+.camera-footer-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: rgba(255,255,255,0.03);
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.camera-shutter-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.4);
+  background: transparent;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s;
+}
+.camera-shutter-btn:active { transform: scale(0.92); }
+.shutter-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* ── Explanation Card & Diverging Chart ──────────────────────────────────── */
+.explanation-card {
+  background: #0d1424;
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  border-radius: 12px;
+  padding: 18px;
+  color: #e8f4ff;
+}
+.expl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.expl-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(0, 255, 136, 0.12);
+  color: #00ff88;
+  border: 1px solid rgba(0, 255, 136, 0.25);
+  font-family: var(--mono);
+}
+.reason-item {
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 0 6px 6px 0;
+}
+.group-tab-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #cde8f5;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.group-tab-btn.active {
+  background: #0077b6;
+  color: #fff;
+  border-color: #0077b6;
+}
+.diverging-axis-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: rgba(205,232,245,0.5);
+  font-family: var(--mono);
+  padding: 0 8px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 6px;
+}
+.diverging-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.d-label {
+  width: 140px;
+  display: flex;
+  justify-content: space-between;
+  color: #cde8f5;
+  font-size: 11px;
+}
+.d-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-val { font-family: var(--mono); opacity: 0.7; }
+.d-track-wrap {
+  flex: 1;
+  height: 14px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+.d-center-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(255,255,255,0.3);
+  z-index: 2;
+}
+.d-normal-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 255, 136, 0.08);
+  z-index: 1;
+}
+.d-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  z-index: 3;
+}
+.d-z-badge {
+  width: 48px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Label Scanner Candidates ────────────────────────────────────────────── */
+.scanner-tab-btn {
+  flex: 1;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #cde8f5;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.scanner-tab-btn.active {
+  background: rgba(0,255,136,0.12);
+  border-color: #00ff88;
+  color: #00ff88;
+  font-weight: 600;
+}
+.candidate-chip {
+  background: rgba(0,255,136,0.08);
+  border: 1px solid rgba(0,255,136,0.3);
+  color: #e8f4ff;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.candidate-chip:hover {
+  background: rgba(0,255,136,0.2);
+  border-color: #00ff88;
+}
+.candidate-chip.exp {
+  background: rgba(116,192,252,0.08);
+  border-color: rgba(116,192,252,0.3);
+}
+.candidate-chip.exp:hover {
+  background: rgba(116,192,252,0.2);
+  border-color: #74c0fc;
+}
+
+/* ── Dashboard Buttons ───────────────────────────────────────────────────── */
+.dash-action-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #cde8f5;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.dash-action-btn:hover { background: rgba(255,255,255,0.16); }
+.dash-action-btn.danger { color: #ff6b6b; border-color: rgba(255,107,107,0.3); }
+.dash-action-btn.danger:hover { background: rgba(255,107,107,0.15); }

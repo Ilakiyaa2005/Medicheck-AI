@@ -1,22 +1,37 @@
 # Python
+venv/
 backend/venv/
 backend/__pycache__/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Environment variables
 .env
+.env.local
+.env.*.local
 
 # Node.js
 node_modules/
+web-app/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Build files
+# Build outputs
 dist/
 build/
+web-app/dist/
 
-# OS files
+# OS and IDE files
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
 
-# Logs
+# Logs & temp
 *.log
+scratch/
